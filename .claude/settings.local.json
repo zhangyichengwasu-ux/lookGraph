@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/Users/zhangyicheng/apache-maven-3.9.6/bin/mvn compile *)",
+      "Bash(java -version)",
+      "Read(//Library/Java/JavaVirtualMachines/**)",
+      "Bash(/usr/libexec/java_home -V)",
+      "Read(//usr/local/Cellar/openjdk@24/**)",
+      "Bash(/usr/libexec/java_home -v 21)",
+      "Read(//opt/homebrew/**)",
+      "Bash(brew list *)",
+      "Bash(curl -s http://localhost:8080/actuator/health)",
+      "Bash(curl -s http://localhost:8080/api/project/list)",
+      "Bash(pkill -f \"spring-boot:run\")",
+      "Bash(pkill -f \"look-graph\")",
+      "Bash(lsof -ti:8080)",
+      "Bash(xargs kill -9)",
+      "Bash(lsof -ti:8090)",
+      "Bash(curl -s http://localhost:8090/api/project/list)",
+      "Bash(curl -s http://localhost:8090/actuator/health)",
+      "Bash(curl -s http://localhost:8000/api/v1/heartbeat)",
+      "Bash(curl -s http://localhost:8000/api/v2/collections)",
+      "Bash(curl -s http://localhost:8000/api/v2/tenants)",
+      "Bash(curl -sv http://localhost:8000/)",
+      "Bash(curl -s http://localhost:8000/api/v2/heartbeat)",
+      "Bash(curl -s http://localhost:8000/docs)",
+      "Bash(curl -s http://localhost:8000/openapi.json)",
+      "Bash(docker info *)",
+      "Bash(lsof -iTCP:7687 -sTCP:LISTEN)",
+      "Bash(lsof -iTCP:8000 -sTCP:LISTEN)",
+      "Bash(lsof -iTCP:8090 -sTCP:LISTEN)"
+    ]
+  }
+}

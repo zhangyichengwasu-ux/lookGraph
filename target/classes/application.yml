@@ -1,0 +1,57 @@
+server:
+  port: 8090
+
+spring:
+  application:
+    name: look-graph
+  threads:
+    virtual:
+      enabled: true
+  neo4j:
+    uri: bolt://localhost:7687
+    authentication:
+      username: neo4j
+      password: ${NEO4J_PASSWORD:Zyc163000!@#}
+    pool:
+      max-connection-pool-size: 50
+      connection-acquisition-timeout: 60s
+  data:
+    neo4j:
+      database: neo4j
+
+lookgraph:
+  chroma:
+    url: ${CHROMA_URL:http://localhost:8000}
+  embedding:
+    api-key: ${EMBEDDING_API_KEY:}
+    base-url: ${EMBEDDING_BASE_URL:https://api.openai.com}
+    model: text-embedding-3-small
+  python:
+    bin: python3
+  scanner:
+    excludes:
+      - "**/target/**"
+      - "**/build/**"
+      - "**/node_modules/**"
+      - "**/.git/**"
+      - "**/.idea/**"
+
+logging:
+  level:
+    com.lookgraph: INFO
+    org.springframework.data.neo4j: WARN
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+  security:
+    enabled: false
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
