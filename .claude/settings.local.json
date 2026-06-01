@@ -28,7 +28,16 @@
       "Bash(docker info *)",
       "Bash(lsof -iTCP:7687 -sTCP:LISTEN)",
       "Bash(lsof -iTCP:8000 -sTCP:LISTEN)",
-      "Bash(lsof -iTCP:8090 -sTCP:LISTEN)"
+      "Bash(lsof -iTCP:8090 -sTCP:LISTEN)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:7474)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8000/api/v1/heartbeat)",
+      "Bash(curl -s http://localhost:8000/api/v1/collections)",
+      "Bash(curl -s http://localhost:7687)",
+      "Bash(curl -s \"http://localhost:7474\")",
+      "Bash(curl -s http://localhost:8000/api/v2/tenants/default_tenant/databases/default_database/collections)",
+      "Bash(./mvnw compile *)",
+      "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/openjdk@24/Contents/Home /Users/zhangyicheng/apache-maven-3.9.6/bin/mvn compile -f /Users/zhangyicheng/Desktop/lookGraph/pom.xml -q)",
+      "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/openjdk@24/Contents/Home /Users/zhangyicheng/apache-maven-3.9.6/bin/mvn test -f /Users/zhangyicheng/Desktop/lookGraph/pom.xml -Dtest=DataWriteIntegrationTest -pl .)"
     ]
   }
 }

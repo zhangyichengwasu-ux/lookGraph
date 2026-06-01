@@ -15,6 +15,9 @@ import java.util.*;
 @Component
 public class ChromaClient {
 
+    private static final String TENANT = "default_tenant";
+    private static final String DATABASE = "default_database";
+
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final String baseUrl;
@@ -26,13 +29,17 @@ public class ChromaClient {
         this.httpClient = HttpClient.newBuilder().build();
     }
 
+    private String collectionPath() {
+        return "/api/v2/tenants/" + TENANT + "/databases/" + DATABASE + "/collections";
+    }
+
     public void getOrCreateCollection(String collectionName) {
         try {
             Map<String, Object> body = Map.of(
                     "name", collectionName,
                     "get_or_create", true
             );
-            post("/api/v1/collections", body);
+            post(collectionPath(), body);
         } catch (Exception e) {
             log.error("创建集合失败: {}", collectionName, e);
         }
@@ -52,7 +59,7 @@ public class ChromaClient {
             body.put("documents", documents);
             body.put("metadatas", metadatas);
 
-            post("/api/v1/collections/" + collectionId + "/upsert", body);
+            post(collectionPath() + "/" + collectionId + "/upsert", body);
         } catch (Exception e) {
             log.error("ChromaDB upsert 失败", e);
             throw new RuntimeException("ChromaDB upsert 失败: " + e.getMessage(), e);
@@ -72,7 +79,7 @@ public class ChromaClient {
                 body.put("where", filter);
             }
 
-            String response = post("/api/v1/collections/" + collectionId + "/query", body);
+            String response = post(collectionPath() + "/" + collectionId + "/query", body);
             return parseQueryResponse(response);
         } catch (Exception e) {
             log.error("ChromaDB query 失败", e);
@@ -84,14 +91,14 @@ public class ChromaClient {
         try {
             String collectionId = getCollectionId(collectionName);
             Map<String, Object> body = Map.of("where", filter);
-            post("/api/v1/collections/" + collectionId + "/delete", body);
+            post(collectionPath() + "/" + collectionId + "/delete", body);
         } catch (Exception e) {
             log.error("ChromaDB delete 失败", e);
         }
     }
 
     private String getCollectionId(String collectionName) throws Exception {
-        String response = get("/api/v1/collections/" + collectionName);
+        String response = get(collectionPath() + "/" + collectionName);
         @SuppressWarnings("unchecked")
         Map<String, Object> map = objectMapper.readValue(response, Map.class);
         return (String) map.get("id");
