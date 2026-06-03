@@ -42,6 +42,7 @@ public class ChromaClient {
             post(collectionPath(), body);
         } catch (Exception e) {
             log.error("创建集合失败: {}", collectionName, e);
+            throw new RuntimeException("ChromaDB getOrCreateCollection 失败: " + e.getMessage(), e);
         }
     }
 
@@ -98,7 +99,18 @@ public class ChromaClient {
     }
 
     private String getCollectionId(String collectionName) throws Exception {
-        String response = get(collectionPath() + "/" + collectionName);
+        String response;
+        try {
+            response = get(collectionPath() + "/" + collectionName);
+        } catch (RuntimeException e) {
+            if (e.getMessage() != null && e.getMessage().contains("404")) {
+                log.info("集合不存在，自动创建: {}", collectionName);
+                getOrCreateCollection(collectionName);
+                response = get(collectionPath() + "/" + collectionName);
+            } else {
+                throw e;
+            }
+        }
         @SuppressWarnings("unchecked")
         Map<String, Object> map = objectMapper.readValue(response, Map.class);
         return (String) map.get("id");

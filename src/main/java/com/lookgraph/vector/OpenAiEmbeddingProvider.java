@@ -1,5 +1,6 @@
 package com.lookgraph.vector;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -84,7 +85,9 @@ public class OpenAiEmbeddingProvider implements EmbeddingProvider {
         return floats;
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     record EmbeddingResponse(List<EmbeddingData> data) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     record EmbeddingData(int index, List<Double> embedding, @JsonProperty("object") String object) {}
 }

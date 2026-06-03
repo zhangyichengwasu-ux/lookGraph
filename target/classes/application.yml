@@ -23,9 +23,9 @@ lookgraph:
   chroma:
     url: ${CHROMA_URL:http://localhost:8000}
   embedding:
-    api-key: ${EMBEDDING_API_KEY:}
-    base-url: ${EMBEDDING_BASE_URL:https://api.openai.com}
-    model: text-embedding-3-small
+    api-key: ${EMBEDDING_API_KEY:ollama}
+    base-url: ${EMBEDDING_BASE_URL:http://localhost:11434}
+    model: bge-m3
   python:
     bin: python3
   scanner:

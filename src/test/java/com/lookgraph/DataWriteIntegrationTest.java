@@ -9,7 +9,9 @@ import com.lookgraph.domain.repository.ClassRepository;
 import com.lookgraph.domain.repository.MethodRepository;
 import com.lookgraph.domain.repository.ModuleRepository;
 import com.lookgraph.domain.repository.ProjectRepository;
-import com.lookgraph.vector.ChromaClient;
+import com.lookgraph.parser.ParseResult;
+import com.lookgraph.vector.VectorDocument;
+import com.lookgraph.vector.VectorIndexService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -31,7 +33,7 @@ class DataWriteIntegrationTest {
     @Autowired
     private MethodRepository methodRepository;
     @Autowired
-    private ChromaClient chromaClient;
+    private VectorIndexService vectorIndexService;
 
     @Test
     void writeNeo4jTestData() {
@@ -121,35 +123,74 @@ class DataWriteIntegrationTest {
 
     @Test
     void writeChromaTestData() {
-        String collection = "code_semantics_test";
-        chromaClient.getOrCreateCollection(collection);
+        String projectId = "test-project-001";
 
-        List<String> ids = List.of("vec-001", "vec-002", "vec-003");
-        List<String> documents = List.of(
-                "订单核心服务，处理下单、取消、查询",
-                "支付网关客户端，对接第三方支付渠道",
-                "创建订单，校验库存后锁定并发起支付"
+        // 构造带注释的类与方法节点（VectorIndexService 只索引有 comment 的实体）
+        ClassNode orderService = new ClassNode();
+        orderService.setClassId("test-class-order-svc");
+        orderService.setName("OrderService");
+        orderService.setFilePath("/projects/test-ecommerce/order/OrderService.java");
+        orderService.setComment("订单核心服务，处理下单、取消、查询");
+        orderService.setModuleId("test-module-order");
+        orderService.setProjectId(projectId);
+        orderService.setType(ClassType.CLASS);
+
+        ClassNode payClient = new ClassNode();
+        payClient.setClassId("test-class-pay-client");
+        payClient.setName("PaymentClient");
+        payClient.setFilePath("/projects/test-ecommerce/pay/PaymentClient.java");
+        payClient.setComment("支付网关客户端，对接微信、支付宝等第三方支付渠道");
+        payClient.setModuleId("test-module-pay");
+        payClient.setProjectId(projectId);
+        payClient.setType(ClassType.CLASS);
+
+        ClassNode userRepo = new ClassNode();
+        userRepo.setClassId("test-class-user-repo");
+        userRepo.setName("UserRepository");
+        userRepo.setFilePath("/projects/test-ecommerce/user/UserRepository.java");
+        userRepo.setComment("用户数据访问层，提供用户注册、查询、更新功能");
+        userRepo.setModuleId("test-module-user");
+        userRepo.setProjectId(projectId);
+        userRepo.setType(ClassType.CLASS);
+
+        MethodNode createOrder = new MethodNode();
+        createOrder.setMethodId("test-method-create-order");
+        createOrder.setName("createOrder");
+        createOrder.setComment("创建订单，校验库存后锁定并发起支付");
+        createOrder.setClassId("test-class-order-svc");
+        createOrder.setProjectId(projectId);
+
+        MethodNode doPay = new MethodNode();
+        doPay.setMethodId("test-method-do-pay");
+        doPay.setName("doPay");
+        doPay.setComment("调用第三方支付渠道执行扣款");
+        doPay.setClassId("test-class-pay-client");
+        doPay.setProjectId(projectId);
+
+        ParseResult parseResult = new ParseResult(
+                List.of(orderService, payClient, userRepo),
+                List.of(createOrder, doPay),
+                List.of(),
+                List.of()
         );
-        List<Map<String, Object>> metadatas = List.of(
-                Map.of("entity_type", "class", "project_id", "test-project-001"),
-                Map.of("entity_type", "class", "project_id", "test-project-001"),
-                Map.of("entity_type", "method", "project_id", "test-project-001")
-        );
 
-        // 生成简单的假 embedding（维度=8，仅测试连通性）
-        List<float[]> embeddings = List.of(
-                new float[]{0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f},
-                new float[]{0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f},
-                new float[]{0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f}
-        );
+        // 初始化集合 + 写入向量
+        vectorIndexService.initCollections();
+        vectorIndexService.indexEntities(projectId, parseResult);
 
-        chromaClient.upsert(collection, ids, embeddings, documents, metadatas);
+        // 语义查询：用「支付」相关的 query，期望支付类排前面
+        List<VectorDocument> results = vectorIndexService.search("支付扣款流程", 3, null);
+        assertFalse(results.isEmpty(), "向量查询应返回结果");
 
-        // query 验证
-        List<?> results = chromaClient.query(collection,
-                new float[]{0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f},
-                3, null);
-        assertFalse(results.isEmpty());
-        System.out.println("[ChromaDB] 数据写入成功，query 返回 " + results.size() + " 条结果");
+        System.out.println("[ChromaDB] bge-m3 向量化 + 写入成功，query 返回 " + results.size() + " 条:");
+        for (VectorDocument doc : results) {
+            System.out.printf("  - id=%s score=%.4f doc=%s%n",
+                    doc.getId(), doc.getScore(), doc.getDocument());
+        }
+
+        // 验证支付相关内容应在 top-2 中
+        boolean paymentInTop2 = results.stream().limit(2)
+                .anyMatch(d -> d.getDocument() != null && d.getDocument().contains("支付"));
+        assertTrue(paymentInTop2, "支付相关内容应排在 top-2");
     }
 }
