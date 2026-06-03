@@ -37,7 +37,32 @@
       "Bash(curl -s http://localhost:8000/api/v2/tenants/default_tenant/databases/default_database/collections)",
       "Bash(./mvnw compile *)",
       "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/openjdk@24/Contents/Home /Users/zhangyicheng/apache-maven-3.9.6/bin/mvn compile -f /Users/zhangyicheng/Desktop/lookGraph/pom.xml -q)",
-      "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/openjdk@24/Contents/Home /Users/zhangyicheng/apache-maven-3.9.6/bin/mvn test -f /Users/zhangyicheng/Desktop/lookGraph/pom.xml -Dtest=DataWriteIntegrationTest -pl .)"
+      "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/openjdk@24/Contents/Home /Users/zhangyicheng/apache-maven-3.9.6/bin/mvn test -f /Users/zhangyicheng/Desktop/lookGraph/pom.xml -Dtest=DataWriteIntegrationTest -pl .)",
+      "Bash(lsof -i:8090 -sTCP:LISTEN)",
+      "Bash(lsof -i:7687 -sTCP:LISTEN)",
+      "Bash(lsof -i:8000 -sTCP:LISTEN)",
+      "Bash(lsof -i:11434 -sTCP:LISTEN)",
+      "Bash(neo4j status *)",
+      "Bash(neo4j start *)",
+      "Bash(nc -z localhost 7687)",
+      "Bash(break)",
+      "Bash(mkdir -p /tmp/lookgraph-logs)",
+      "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/openjdk@24/Contents/Home /Users/zhangyicheng/apache-maven-3.9.6/bin/mvn -q -DskipTests spring-boot:run)",
+      "Bash(echo \"PID=$!\")",
+      "Bash(ps -p 13041 -o pid,stat,command)",
+      "Bash(curl -s -o /dev/null -w \"actuator/health: %{http_code}\\\\n\" http://localhost:8090/actuator/health)",
+      "Bash(direnv version *)",
+      "Bash(curl -s http://localhost:7474 -o /dev/null -w \"neo4j http: %{http_code}\\\\n\")",
+      "Bash(curl -s http://localhost:8000/api/v1/heartbeat -w \"\\\\nchroma: %{http_code}\\\\n\")",
+      "Bash(curl *)",
+      "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/openjdk@24/Contents/Home /Users/zhangyicheng/apache-maven-3.9.6/bin/mvn -q compile)",
+      "Bash(kill 13041)",
+      "Bash(:)",
+      "Bash(jstack 36340)",
+      "Read(//tmp/lookgraph-logs/**)",
+      "Bash(awk '{print $1,$2,$3,$11}')",
+      "Bash(kill 36340 36321)",
+      "Bash(echo \"curl PID=$!\")"
     ]
   }
 }
