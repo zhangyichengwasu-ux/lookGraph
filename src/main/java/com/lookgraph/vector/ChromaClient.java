@@ -18,7 +18,6 @@ public class ChromaClient {
     private static final String TENANT = "default_tenant";
     private static final String DATABASE = "default_database";
 
-    private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final String baseUrl;
 
@@ -26,7 +25,10 @@ public class ChromaClient {
                         @Value("${lookgraph.chroma.url}") String baseUrl) {
         this.objectMapper = objectMapper;
         this.baseUrl = baseUrl;
-        this.httpClient = HttpClient.newBuilder().build();
+    }
+
+    private HttpClient http() {
+        return HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build();
     }
 
     private String collectionPath() {
@@ -148,7 +150,7 @@ public class ChromaClient {
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(json))
                 .build();
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = http().send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() >= 400) {
             throw new RuntimeException("ChromaDB 请求失败: " + response.statusCode() + " " + response.body());
         }
@@ -160,7 +162,7 @@ public class ChromaClient {
                 .uri(URI.create(baseUrl + path))
                 .GET()
                 .build();
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = http().send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() >= 400) {
             throw new RuntimeException("ChromaDB 请求失败: " + response.statusCode() + " " + response.body());
         }
