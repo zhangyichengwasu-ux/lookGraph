@@ -4,11 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClient;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.util.*;
 
 @Slf4j
@@ -18,17 +15,13 @@ public class ChromaClient {
     private static final String TENANT = "default_tenant";
     private static final String DATABASE = "default_database";
 
+    private final RestClient restClient;
     private final ObjectMapper objectMapper;
-    private final String baseUrl;
 
     public ChromaClient(ObjectMapper objectMapper,
                         @Value("${lookgraph.chroma.url}") String baseUrl) {
         this.objectMapper = objectMapper;
-        this.baseUrl = baseUrl;
-    }
-
-    private HttpClient http() {
-        return HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build();
+        this.restClient = RestClient.builder().baseUrl(baseUrl).build();
     }
 
     private String collectionPath() {
@@ -37,11 +30,12 @@ public class ChromaClient {
 
     public void getOrCreateCollection(String collectionName) {
         try {
-            Map<String, Object> body = Map.of(
-                    "name", collectionName,
-                    "get_or_create", true
-            );
-            post(collectionPath(), body);
+            restClient.post()
+                    .uri(collectionPath())
+                    .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                    .body(Map.of("name", collectionName, "get_or_create", true))
+                    .retrieve()
+                    .toBodilessEntity();
         } catch (Exception e) {
             log.error("创建集合失败: {}", collectionName, e);
             throw new RuntimeException("ChromaDB getOrCreateCollection 失败: " + e.getMessage(), e);
@@ -52,9 +46,7 @@ public class ChromaClient {
                        List<String> documents, List<Map<String, Object>> metadatas) {
         try {
             String collectionId = getCollectionId(collectionName);
-            List<List<Float>> embeddingList = embeddings.stream()
-                    .map(this::toFloatList)
-                    .toList();
+            List<List<Float>> embeddingList = embeddings.stream().map(this::toFloatList).toList();
 
             Map<String, Object> body = new HashMap<>();
             body.put("ids", ids);
@@ -62,7 +54,12 @@ public class ChromaClient {
             body.put("documents", documents);
             body.put("metadatas", metadatas);
 
-            post(collectionPath() + "/" + collectionId + "/upsert", body);
+            restClient.post()
+                    .uri(collectionPath() + "/" + collectionId + "/upsert")
+                    .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                    .body(body)
+                    .retrieve()
+                    .toBodilessEntity();
         } catch (Exception e) {
             log.error("ChromaDB upsert 失败", e);
             throw new RuntimeException("ChromaDB upsert 失败: " + e.getMessage(), e);
@@ -82,7 +79,12 @@ public class ChromaClient {
                 body.put("where", filter);
             }
 
-            String response = post(collectionPath() + "/" + collectionId + "/query", body);
+            String response = restClient.post()
+                    .uri(collectionPath() + "/" + collectionId + "/query")
+                    .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                    .body(body)
+                    .retrieve()
+                    .body(String.class);
             return parseQueryResponse(response);
         } catch (Exception e) {
             log.error("ChromaDB query 失败", e);
@@ -93,29 +95,41 @@ public class ChromaClient {
     public void deleteByMetadata(String collectionName, Map<String, Object> filter) {
         try {
             String collectionId = getCollectionId(collectionName);
-            Map<String, Object> body = Map.of("where", filter);
-            post(collectionPath() + "/" + collectionId + "/delete", body);
+            restClient.post()
+                    .uri(collectionPath() + "/" + collectionId + "/delete")
+                    .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                    .body(Map.of("where", filter))
+                    .retrieve()
+                    .toBodilessEntity();
         } catch (Exception e) {
             log.error("ChromaDB delete 失败", e);
         }
     }
 
-    private String getCollectionId(String collectionName) throws Exception {
-        String response;
+    @SuppressWarnings("unchecked")
+    private String getCollectionId(String collectionName) {
         try {
-            response = get(collectionPath() + "/" + collectionName);
-        } catch (RuntimeException e) {
-            if (e.getMessage() != null && e.getMessage().contains("404")) {
-                log.info("集合不存在，自动创建: {}", collectionName);
-                getOrCreateCollection(collectionName);
-                response = get(collectionPath() + "/" + collectionName);
-            } else {
-                throw e;
+            String response = restClient.get()
+                    .uri(collectionPath() + "/" + collectionName)
+                    .retrieve()
+                    .body(String.class);
+            Map<String, Object> map = objectMapper.readValue(response, Map.class);
+            return (String) map.get("id");
+        } catch (org.springframework.web.client.HttpClientErrorException.NotFound e) {
+            getOrCreateCollection(collectionName);
+            try {
+                String response = restClient.get()
+                        .uri(collectionPath() + "/" + collectionName)
+                        .retrieve()
+                        .body(String.class);
+                Map<String, Object> map = objectMapper.readValue(response, Map.class);
+                return (String) map.get("id");
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
             }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
-        @SuppressWarnings("unchecked")
-        Map<String, Object> map = objectMapper.readValue(response, Map.class);
-        return (String) map.get("id");
     }
 
     @SuppressWarnings("unchecked")
@@ -126,9 +140,7 @@ public class ChromaClient {
         List<List<Map<String, Object>>> metadatas = (List<List<Map<String, Object>>>) map.get("metadatas");
         List<List<Double>> distances = (List<List<Double>>) map.get("distances");
 
-        if (ids == null || ids.isEmpty() || ids.getFirst().isEmpty()) {
-            return List.of();
-        }
+        if (ids == null || ids.isEmpty() || ids.getFirst().isEmpty()) return List.of();
 
         List<VectorDocument> results = new ArrayList<>();
         List<String> firstIds = ids.getFirst();
@@ -143,37 +155,9 @@ public class ChromaClient {
         return results;
     }
 
-    private String post(String path, Map<String, Object> body) throws Exception {
-        String json = objectMapper.writeValueAsString(body);
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + path))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(json))
-                .build();
-        HttpResponse<String> response = http().send(request, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() >= 400) {
-            throw new RuntimeException("ChromaDB 请求失败: " + response.statusCode() + " " + response.body());
-        }
-        return response.body();
-    }
-
-    private String get(String path) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + path))
-                .GET()
-                .build();
-        HttpResponse<String> response = http().send(request, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() >= 400) {
-            throw new RuntimeException("ChromaDB 请求失败: " + response.statusCode() + " " + response.body());
-        }
-        return response.body();
-    }
-
     private List<Float> toFloatList(float[] arr) {
         List<Float> list = new ArrayList<>(arr.length);
-        for (float f : arr) {
-            list.add(f);
-        }
+        for (float f : arr) list.add(f);
         return list;
     }
 }

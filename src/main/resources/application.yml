@@ -21,11 +21,11 @@ spring:
 
 lookgraph:
   chroma:
-    url: ${CHROMA_URL:http://localhost:8000}
+    url: ${CHROMA_URL:http://[::1]:8000}
   embedding:
     api-key: ${EMBEDDING_API_KEY:ollama}
     base-url: ${EMBEDDING_BASE_URL:http://localhost:11434}
-    model: bge-m3
+    model: nomic-embed-text
   python:
     bin: python3
   scanner:

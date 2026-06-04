@@ -62,7 +62,24 @@
       "Read(//tmp/lookgraph-logs/**)",
       "Bash(awk '{print $1,$2,$3,$11}')",
       "Bash(kill 36340 36321)",
-      "Bash(echo \"curl PID=$!\")"
+      "Bash(echo \"curl PID=$!\")",
+      "Bash(awk '{print $2}')",
+      "Bash(kill 15332 15289)",
+      "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/openjdk@24/Contents/Home /Users/zhangyicheng/apache-maven-3.9.6/bin/mvn -q clean compile)",
+      "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/openjdk@24/Contents/Home /Users/zhangyicheng/apache-maven-3.9.6/bin/mvn -q -DskipTests spring-boot:run -f /Users/zhangyicheng/Documents/GitHub/lookGraph/pom.xml)",
+      "Bash(awk '{print $2,$3,$11}')",
+      "Bash(jstack 38549)",
+      "Read(//Users/zhangyicheng/.ollama/logs/**)",
+      "Bash(top -l 1)",
+      "Bash(ollama show *)",
+      "Bash(system_profiler SPDisplaysDataType)",
+      "Bash(ollama list *)",
+      "Bash(ollama pull *)",
+      "Bash(kill 64075)",
+      "Bash(wait)",
+      "Bash(echo \"started PID=$!\")",
+      "Bash(awk '{print $2,$3,$4}')",
+      "Bash(awk '{printf \"ollama runner CPU=%s%%\\\\n\",$3}')"
     ]
   }
 }
