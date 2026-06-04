@@ -15,6 +15,9 @@ public interface ClassRepository extends Neo4jRepository<ClassNode, String> {
 
     List<ClassNode> findByProjectId(String projectId);
 
+    @Query("MATCH (c:Class {projectId: $projectId}) RETURN count(c)")
+    long countByProjectId(@Param("projectId") String projectId);
+
     @Query("MATCH (c:Class {filePath: $filePath}) DETACH DELETE c")
     void deleteAllByFilePath(@Param("filePath") String filePath);
 

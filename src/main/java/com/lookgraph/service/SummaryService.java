@@ -1,7 +1,5 @@
 package com.lookgraph.service;
 
-import com.lookgraph.domain.node.ClassNode;
-import com.lookgraph.domain.node.ModuleNode;
 import com.lookgraph.domain.node.ProjectNode;
 import com.lookgraph.domain.repository.ClassRepository;
 import com.lookgraph.domain.repository.MethodRepository;
@@ -30,22 +28,20 @@ public class SummaryService {
         ProjectNode project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new RuntimeException("项目不存在: " + projectId));
 
-        List<ClassNode> classes = classRepository.findByProjectId(projectId);
-        List<ModuleNode> modules = moduleRepository.findByProjectId(projectId);
+        long classCount = classRepository.countByProjectId(projectId);
+        long methodCount = methodRepository.countByProjectId(projectId);
+        long moduleCount = moduleRepository.countByProjectId(projectId);
+        List<String> moduleNames = moduleRepository.findModuleNamesByProjectId(projectId);
 
-        List<String> moduleNames = modules.stream()
-                .map(ModuleNode::getName)
-                .toList();
-
-        String overview = buildOverview(project, classes.size(), modules.size());
+        String overview = buildOverview(project, classCount, moduleCount);
 
         return new ProjectSummary(
                 project.getProjectId(),
                 project.getName(),
                 project.getTechStack(),
-                classes.size(),
-                (int) classes.stream().mapToLong(c -> c.getMethods() != null ? c.getMethods().size() : 0).sum(),
-                modules.size(),
+                (int) classCount,
+                (int) methodCount,
+                (int) moduleCount,
                 moduleNames,
                 overview);
     }
@@ -57,7 +53,7 @@ public class SummaryService {
         log.info("项目摘要已生成并索引: {}", projectId);
     }
 
-    private String buildOverview(ProjectNode project, int classCount, int moduleCount) {
+    private String buildOverview(ProjectNode project, long classCount, long moduleCount) {
         return String.format("项目 %s，技术栈 %s，包含 %d 个类，%d 个模块。",
                 project.getName(), project.getTechStack(), classCount, moduleCount);
     }

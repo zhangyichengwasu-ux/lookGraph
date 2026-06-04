@@ -13,6 +13,12 @@ public interface ModuleRepository extends Neo4jRepository<ModuleNode, String> {
 
     List<ModuleNode> findByProjectId(String projectId);
 
+    @Query("MATCH (m:Module {projectId: $projectId}) RETURN m.name ORDER BY m.name")
+    List<String> findModuleNamesByProjectId(@Param("projectId") String projectId);
+
+    @Query("MATCH (m:Module {projectId: $projectId}) RETURN count(m)")
+    long countByProjectId(@Param("projectId") String projectId);
+
     @Query("MATCH (m:Module {projectId: $projectId})-[:DEPENDS_ON]->(dep:Module) RETURN m, dep")
     List<ModuleNode> findModulesWithDependencies(@Param("projectId") String projectId);
 

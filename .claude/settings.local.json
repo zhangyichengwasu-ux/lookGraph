@@ -79,7 +79,11 @@
       "Bash(wait)",
       "Bash(echo \"started PID=$!\")",
       "Bash(awk '{print $2,$3,$4}')",
-      "Bash(awk '{printf \"ollama runner CPU=%s%%\\\\n\",$3}')"
+      "Bash(awk '{printf \"ollama runner CPU=%s%%\\\\n\",$3}')",
+      "Bash(mvn -q -DskipTests compile)",
+      "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/openjdk@24/Contents/Home mvn -q -DskipTests compile)",
+      "Bash(ps -p 26711 -o command=)",
+      "Bash(grep -E \"lookgraph|look-graph|jar$|spring-boot|Application\")"
     ]
   }
 }
