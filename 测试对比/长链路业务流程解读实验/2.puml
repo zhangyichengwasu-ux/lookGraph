@@ -1,0 +1,327 @@
+@startuml 商城正向流程单据流转图
+' ============================================================
+' 商城下单→派单→备货→发货 正向流程全链路单据流转图
+' 基于 LookGraph 代码分析自动生成
+' projectId: e9d3146c206e4c5aa61cf56c2b335201
+' ============================================================
+
+title 商城下单→派单→备货→发货 正向流程单据流转图（对象图）
+
+' ============================================================
+' 图例说明
+' ============================================================
+legend right
+  |<#E8F5E9> 绿色 | 阶段1：下单 |
+  |<#FFF3E0> 橙色 | 阶段2：派单/拆单 |
+  |<#E3F2FD> 蓝色 | 阶段3：备货/出库 |
+  |<#F3E5F5> 紫色 | 阶段4：发货/配送 |
+  |<#FFEBEE> 红色 | 库存锁定（跨阶段）|
+  |→ 实线箭头 | 直接生成关系 |
+  |- - > 虚线箭头 | 消息/事件触发 |
+endlegend
+
+' ============================================================
+' 阶段1：下单
+' ============================================================
+package "阶段1：下单 (Mall模块)" #E8F5E9 {
+
+    object "MallPreOrderDO\n预订单" as PreOrder #E8F5E9 {
+        id : Long <<PK>>
+        pre_order_no : String <<预购单编号>>
+        user_id : Long <<下单用户>>
+        enterprise_id : Long <<企业ID>>
+        city_id : Long <<城市ID>>
+        total_amount : Long <<总金额(分)>>
+        status : String <<状态>>
+        create_time : Date
+    }
+
+    object "MallOrderDO\n订单主表 (mall_order)" as MallOrder #E8F5E9 {
+        id : Long <<PK>>
+        city_id : Long <<城市ID>>
+        user_id : Long <<下单用户ID>>
+        enterprise_id : Long <<企业ID>>
+        order_source : String <<PRE_ORDER/SHOPPING_CART>>
+        pre_order_id : String <<关联预购单ID>>
+        product_amount : Long <<商品总金额(分)>>
+        freight_amount : Long <<运费(分)>>
+        discount_amount : Long <<优惠金额(分)>>
+        total_amount : Long <<订单总金额(分)>>
+        pay_type : String <<支付方式>>
+        pay_time : Date <<支付时间>>
+        transaction_id : Long <<支付交易号>>
+        front_status : String <<前端状态>>
+        back_status : String <<后端状态>>
+        refund_status : String <<退款状态>>
+        expected_delivery_time : Date <<预计送达>>
+        cutoff_time : Date <<截单时间>>
+        version : Long <<乐观锁>>
+        create_time : Date
+    }
+
+    object "MallOrderDetailDO\n订单明细 (mall_order_detail)" as OrderDetail #E8F5E9 {
+        id : Long <<PK>>
+        order_id : Long <<FK→MallOrderDO>>
+        sku_id : Long <<SKU ID>>
+        sku_name : String <<SKU名称>>
+        quantity : Integer <<数量>>
+        unit_price : Long <<单价(分)>>
+        total_price : Long <<总价(分)>>
+        create_time : Date
+    }
+}
+
+' ============================================================
+' 阶段2：派单/拆单
+' ============================================================
+package "阶段2：派单/拆单 (Mall模块)" #FFF3E0 {
+
+    object "MallOrderBackSplitDO\n拆单-父单/子单\n(mall_order_back_split)" as ParentSplit #FFF3E0 {
+        id : Long <<PK>>
+        main_order_id : Long <<FK→MallOrderDO>>
+        parent_split_id : Long <<父拆单ID，null=父单>>
+        split_order_no : String <<子单编号>>
+        user_id : Long <<用户ID>>
+        enterprise_id : Long <<企业ID>>
+        city_id : Long <<城市ID>>
+        warehouse_id : Long <<仓库ID>>
+        supplier_id : Long <<供应商ID>>
+        product_amount : Long <<商品金额(分)>>
+        freight_amount : Long <<运费(分)>>
+        total_amount : Long <<总金额(分)>>
+        back_status : String <<后端状态>>
+        version : Long <<乐观锁>>
+        create_time : Date
+    }
+
+    object "MallOrderBackSplitDetailDO\n拆单明细\n(mall_order_back_split_detail)" as SplitDetail #FFF3E0 {
+        id : Long <<PK>>
+        split_order_id : Long <<FK→拆单ID>>
+        main_order_detail_id : Long <<FK→订单明细ID>>
+        sku_id : Long <<SKU ID>>
+        sku_name : String <<SKU名称>>
+        quantity : Integer <<数量>>
+        unit_price : Long <<单价(分)>>
+        warehouse_id : Long <<仓库ID>>
+        supplier_id : Long <<供应商ID>>
+        prepare_quantity : Integer <<备货数量>>
+        stockout_quantity : Integer <<缺货数量>>
+        sign_quantity : Integer <<签收数量>>
+        refund_quantity : Integer <<退款数量>>
+        create_time : Date
+    }
+}
+
+' ============================================================
+' 库存锁定（跨阶段2-3）
+' ============================================================
+package "库存锁定 (Stock模块)" #FFEBEE {
+
+    object "StockWarehouseCityOrderLockDO\n库存锁定记录\n(stock_warehouse_city_order_lock)" as StockLock #FFEBEE {
+        id : Long <<PK>>
+        order_id : Long <<FK→订单ID>>
+        order_detail_id : Long <<FK→订单明细ID>>
+        stock_warehouse_city_id : Long <<FK→库存记录>>
+        sku_id : Long <<SKU ID>>
+        city_id : Long <<城市ID>>
+        warehouse_id : Long <<仓库ID>>
+        supplier_id : Long <<供应商ID>>
+        lock_quantity : Integer <<锁定数量>>
+        before_lock_stock : Integer <<锁定前可用库存>>
+        after_lock_stock : Integer <<锁定后可用库存>>
+        released_quantity : Integer <<已释放数量>>
+        lock_status : String <<锁定状态>>
+        version : Integer <<乐观锁>>
+        create_time : Date
+    }
+
+    object "MallDispatchLockRecordDO\n派单锁记录\n(mall_dispatch_lock_record)" as DispatchLock #FFEBEE {
+        id : Long <<PK>>
+        split_order_id : Long <<FK→拆单ID>>
+        split_order_detail_id : Long <<FK→拆单明细ID>>
+        lock_level : String <<WAREHOUSE/AREA>>
+        stock_id : Long <<库存ID>>
+        op_type : String <<LOCK-加锁>>
+        before_stock : Integer <<操作前库存>>
+        stock : Integer <<操作数量>>
+        after_stock : Integer <<操作后库存>>
+        create_time : Date
+    }
+}
+
+' ============================================================
+' 阶段3：备货/出库
+' ============================================================
+package "阶段3：备货/出库 (Supplier/WMS模块)" #E3F2FD {
+
+    object "WmsDeliveryConfirmationDO\n发货确认单\n(wms_delivery_confirmation)" as DeliveryConfirm #E3F2FD {
+        id : Long <<PK>>
+        code : String <<确认单编号>>
+        warehouse_id : Long <<仓库ID>>
+        mall_order_id : Long <<FK→MallOrderDO>>
+        user_id : Long <<用户ID>>
+        enterprise_id : Long <<企业ID>>
+        receiver_name : String <<收货人>>
+        receiver_phone : String <<收货电话>>
+        plan_deliver_date : Date <<计划发货日>>
+        confirm_time : Date <<确认时间>>
+        status : String <<PENDING/CONFIRMED/CANCELED>>
+        create_time : Date
+    }
+
+    object "WmsOutStorageOrderDO\n出库单\n(wms_out_storage_order)" as OutStorage #E3F2FD {
+        id : Long <<PK>>
+        type : String <<单据类型>>
+        code : String <<单据编号>>
+        out_storage_type : String <<出库类型>>
+        source_order_no : String <<来源单号>>
+        warehouse_id : Long <<仓库ID>>
+        owner_id : Long <<货主ID>>
+        owner_name : String <<货主名称>>
+        status : String <<状态>>
+        out_storage_time : Date <<出库时间>>
+        out_storage_reason : String <<出库原因>>
+        create_time : Date
+    }
+
+    object "WmsOutStorageOrderDetailDO\n出库单明细\n(wms_out_storage_order_detail)" as OutStorageDetail #E3F2FD {
+        id : Long <<PK>>
+        out_storage_order_id : Long <<FK→出库单>>
+        sku_id : Long <<SKU ID>>
+        quantity : Integer <<数量>>
+        create_time : Date
+    }
+
+    object "WmsDeliveryOrderDO\nWMS发货单\n(wms_delivery_order)" as WmsDelivery #E3F2FD {
+        id : Long <<PK>>
+        code : String <<发货单编号>>
+        type : String <<SALES/TRANSFER>>
+        warehouse_id : Long <<仓库ID>>
+        status : String <<COMPLETED>>
+        operator_id : Long <<操作人>>
+        create_time : Date
+    }
+}
+
+' ============================================================
+' 阶段4：发货/配送
+' ============================================================
+package "阶段4：发货/配送 (Logis物流模块)" #F3E5F5 {
+
+    object "LogisticsDistributedOrderDO\n已派物流订单\n(logistics_distributed_order)" as DistributedOrder #F3E5F5 {
+        id : Long <<PK>>
+        delivery_order_id : Long <<FK→配送单>>
+        driver_id : Long <<司机ID>>
+        vehicle_id : Long <<车辆ID>>
+        status : String <<状态>>
+        create_time : Date
+    }
+
+    object "LogisticsDeliveryOrderDO\n配送单/送货单\n(logistics_delivery_order)" as DeliveryOrder #F3E5F5 {
+        id : Long <<PK>>
+        receiver_id : Long <<收货方ID>>
+        enterprise_id : Long <<企业ID>>
+        transportation_order_id : Long <<FK→运单ID>>
+        type : Integer <<1-配送/2-退取货/3-送+退取>>
+        status : Integer <<00未到达/20已到达/40已完成/80无法送达/90已取消>>
+        estimate_arrive_time : Date <<预计到达>>
+        arrive_time : Date <<到达时间>>
+        start_time : Date <<首单确认时间>>
+        finish_time : Date <<完成时间>>
+        goods_total : Integer <<商品总数>>
+        goods_kind_total : Integer <<商品种类数>>
+        create_time : Date
+    }
+
+    object "LogisticsDeliveryOrderPackageDO\n包裹\n(logistics_delivery_order_package)" as Package #F3E5F5 {
+        id : Long <<PK>>
+        main_order_id : Long <<FK→MallOrderDO>>
+        transportation_order_id : Long <<FK→运单ID>>
+        delivery_order_id : Long <<FK→配送单ID>>
+        delivery_order_status : Integer <<10未签收/20已签收/30拒收/50无法送达/60已取消>>
+        complete_time : Date <<签收完成时间>>
+        complete_type : Integer <<签收方式>>
+        create_time : Date
+    }
+}
+
+' ============================================================
+' 关系连线
+' ============================================================
+
+' --- 阶段1内部关系 ---
+PreOrder --> MallOrder : "1:1 预购单转订单\n(PreOrderService.createOrder)"
+MallOrder --> OrderDetail : "1:N 订单含明细\n(主订单ID)"
+
+' --- 阶段1→阶段2：下单到拆单 ---
+MallOrder --> ParentSplit : "1:1 生成父拆单\n(MallOrderBackSplitDO.of)\nmain_order_id关联"
+
+' --- 阶段2内部关系 ---
+ParentSplit --> ParentSplit : "1:N 拆分为子单\n(ManualSplitOrderBiz.split)\nparent_split_id自关联"
+ParentSplit --> SplitDetail : "1:N 拆单含明细\n(split_order_id关联)"
+
+' --- 阶段2→库存锁定 ---
+ParentSplit ..> StockLock : "拆单后触发\n(RocketMQ消息)\nStockWarehouseCityProducer"
+ParentSplit ..> DispatchLock : "拆单后触发\n(MallDispatchLockRecordBiz)\nsplit_order_id关联"
+
+' --- 库存锁定内部 ---
+DispatchLock --> SplitDetail : "N:1 锁定关联明细\n(split_order_detail_id)"
+
+' --- 阶段2→阶段3：拆单到备货 ---
+ParentSplit --> DeliveryConfirm : "1:N 创建发货确认单\n(WmsDeliveryConfirmationBiz)\nmall_order_id关联"
+
+' --- 阶段3内部关系 ---
+DeliveryConfirm --> OutStorage : "1:N 生成出库单\ncreateSalesOutStorageOrder\n(平台仓)/createTransfer\nOutStorageOrder(供应商仓)"
+OutStorage --> OutStorageDetail : "1:N 出库含明细"
+DeliveryConfirm ..> WmsDelivery : "1:N 出库后生成发货单\n(WmsDeliveryOrderProducer\n→RocketMQ)"
+
+' --- 阶段3→阶段4：出库到配送 ---
+WmsDelivery ..> DeliveryOrder : "WMS发货单→物流配送单\n(RocketMQ→logis模块)\nWmsDeliveryOrderMsg"
+
+' --- 阶段4内部关系 ---
+DeliveryOrder --> DistributedOrder : "1:1 派车调度\n(LogisticsDistributedOrder)"
+DeliveryOrder --> Package : "1:N 配送单含包裹\n(delivery_order_id关联)"
+Package --> MallOrder : "N:1 包裹关联主订单\n(main_order_id)"
+
+' ============================================================
+' 流转注释
+' ============================================================
+note top of PreOrder
+  <b>入口</b>: OrderController.preOrder()
+  → ApiOrderBiz.preOrder()
+  → MallOrderFacade.preOrder()
+  → PreOrderService.createOrder()
+  校验SKU可用性、计算运费、金额校验
+end note
+
+note top of ParentSplit
+  <b>入口</b>: ManualSplitOrderBiz.split()
+  1. 校验父拆单
+  2. 按供应商+仓库分组
+  3. 单供应商→更新父单
+  4. 多供应商→生成子单
+  5. 触发库存锁定
+  6. 更新拆单状态
+end note
+
+note top of DeliveryConfirm
+  <b>入口</b>: WmsDeliveryConfirmationBiz
+  1. 创建发货确认单
+  2. 基于子单明细查询库存锁定
+  3. 销售出库(平台仓)
+     createSalesOutStorageOrder()
+  4. 调拨出库(供应商仓)
+     createTransferOutStorageOrder()
+end note
+
+note top of DeliveryOrder
+  <b>入口</b>: DeliveryOrderBiz
+  1. 生成配送单
+  2. 派车调度
+  3. 司机取货→startDeliveryOrder()
+     状态: 未到达→已到达
+  4. 司机配送→confirmDeliveryOrder()
+     状态: 已到达→已完成
+end note
+
+@enduml

@@ -1,0 +1,363 @@
+@startuml 商城下单至发货全链路单据流转图
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 12
+skinparam object {
+  BorderColor #333333
+  BackgroundColor #F5F5F5
+}
+skinparam arrow {
+  Color #555555
+  Thickness 1.5
+}
+
+title **商城正向流程 — 下单 → 派单 → 备货 → 发货 全链路单据对象流转图**\n
+' 本图基于 LookGraph 对 zcyl-backend 代码库的语义分析生成
+' 涵盖 zcyl-mall / zcyl-pay / zcyl-stock / zcyl-logis / zcyl-supplier 五大领域模块
+
+' ============================================================
+' 阶段 1: 下单
+' ============================================================
+package "阶段1: 下单 (zcyl-mall + zcyl-pay)" as P1 #E8F5E9 {
+  object "**MallOrderDO**\n订单主表" as MallOrder {
+    orderNo : String
+    enterpriseId : Long
+    userId : Long
+    totalAmount : Long
+    status : Integer
+    deliveryDate : Date
+    createTime : Date
+  }
+
+  object "**MallOrderDetailDO**\n订单明细" as MallOrderDetail {
+    orderId : Long
+    skuId : Long
+    skuName : String
+    quantity : Integer
+    unitPrice : Long
+    supplierId : Long
+    warehouseId : Long
+  }
+
+  object "**PayChannelPaymentOrderDO**\n支付单" as PayOrder {
+    payOrderNo : String
+    bizOrderId : Long
+    payAmount : Long
+    payStatus : Integer
+    payType : String
+    channelOrderNo : String
+  }
+
+  object "**PayChannelPaymentOrderRefundDO**\n退款单" as PayRefund {
+    refundOrderNo : String
+    payOrderId : Long
+    refundAmount : Long
+    refundStatus : Integer
+  }
+
+  MallOrder ||--o{ MallOrderDetail : "1对多"
+  MallOrder ||--|| PayOrder : "1对1支付"
+  PayOrder ||--o{ PayRefund : "1对多退款"
+}
+
+' ============================================================
+' 阶段 2: 拆单 & 锁库
+' ============================================================
+package "阶段2: 拆单 & 派单锁库 (zcyl-mall + zcyl-stock)" as P2 #E3F2FD {
+  object "**MallOrderBackSplitDO**\n拆单表(父单)" as ParentSplit {
+    id : Long
+    orderId : Long
+    splitNo : String
+    splitStatus : Enum
+    dispatchStatus : Enum
+    isParent : Boolean = YES
+    failReason : String
+  }
+
+  object "**MallOrderBackSplitDO**\n拆单表(子单)" as ChildSplit {
+    id : Long
+    parentSplitId : Long
+    orderId : Long
+    splitNo : String
+    supplierId : Long
+    warehouseId : Long
+    splitStatus : Enum
+    dispatchStatus : Enum
+    isParent : Boolean = NO
+    totalAmount : Long
+    freight : Long
+  }
+
+  object "**MallOrderBackSplitDetailDO**\n拆分明细" as SplitDetail {
+    splitId : Long
+    orderDetailId : Long
+    skuId : Long
+    splitQuantity : Integer
+    settlementPrice : Long
+    supplierId : Long
+    warehouseId : Long
+    stockWarehouseId : Long
+  }
+
+  object "**MallDispatchLockRecordDO**\n派单锁定记录" as LockRecord {
+    splitOrderId : Long
+    splitDetailId : Long
+    skuId : Long
+    lockQuantity : Integer
+    warehouseId : Long
+    areaId : Long
+    lockLevel : String
+    lockStatus : Integer
+  }
+
+  object "**StockOrderDispatchStockLock**\n派单库存锁定(主)" as StockLock {
+    lockId : Long
+    splitId : Long
+    warehouseId : Long
+    lockType : String
+    lockStatus : Integer
+  }
+
+  object "**StockOrderDispatchStockLockDetail**\n库存锁定明细" as StockLockDetail {
+    lockId : Long
+    skuId : Long
+    stockAreaId : Long
+    lockQuantity : Integer
+    supplierId : Long
+    availableQuantity : Integer
+  }
+
+  object "**DispatchLockResultMsg**\n锁库结果消息\n(RocketMQ异步回调)" as LockMsg {
+    splitId : Long
+    lockLevel : String
+    detailList : List
+  }
+
+  MallOrder ||--o{ ParentSplit : "拆单生成"
+  ParentSplit ||--o{ ChildSplit : "父拆单→子拆单\nAutoSplitOrderBiz/\nManualSplitOrderBiz"
+  ParentSplit ||--o{ SplitDetail : "1对多明细"
+  ChildSplit ||--o{ SplitDetail : "子单明细"
+  SplitDetail ||--o{ LockRecord : "锁定记录"
+  ParentSplit ..> LockMsg : "触发库存锁定请求"
+  LockMsg ..> StockLock : "库存服务处理"
+  StockLock ||--o{ StockLockDetail : "1对多明细"
+  LockMsg ..> ChildSplit : "锁库结果回调\nDispatchStockLockResultBiz\n全成功→更新父单\n部分成功→生成子单\n全失败→标记失败"
+}
+
+' ============================================================
+' 阶段 3: 生成运输单
+' ============================================================
+package "阶段3: 生成运输单 (zcyl-logis)" as P3 #FFF3E0 {
+  object "**LogisticsVirtualTransportationDO**\n虚拟运单" as VirtualTrans {
+    id : Long
+    transNo : String
+    vehicleType : String
+    plannedStartTime : Date
+    status : Integer
+    driverId : Long
+  }
+
+  object "**LogisticsVirtualReachOrderDO**\n虚拟路径点位" as VirtualReach {
+    virtualTransId : Long
+    reachType : String
+    addressId : Long
+    warehouseId : Long
+    sequenceNo : Integer
+  }
+
+  object "**LogisticsTransportationOrderDO**\n正式运单主表" as TransOrder {
+    id : Long
+    transNo : String
+    virtualTransId : Long
+    driverId : Long
+    vehicleNo : String
+    status : Integer
+    pickupCount : Integer
+    deliveryCount : Integer
+    plannedStartTime : Date
+    actualStartTime : Date
+  }
+
+  object "**LogisticsPickupOrderDO**\n取货单" as PickupOrder {
+    id : Long
+    transOrderId : Long
+    warehouseId : Long
+    warehouseName : String
+    status : Integer
+    plannedPickupTime : Date
+    actualPickupTime : Date
+    sequenceNo : Integer
+  }
+
+  object "**LogisticsDeliveryOrderDO**\n配送单" as DeliveryOrder {
+    id : Long
+    transOrderId : Long
+    addressId : Long
+    receiverName : String
+    receiverPhone : String
+    status : Integer
+    sequenceNo : Integer
+  }
+
+  object "**LogisticsDeliveryOrderPackageDO**\n配送包裹" as DeliveryPackage {
+    id : Long
+    deliveryOrderId : Long
+    transOrderId : Long
+    status : Integer
+  }
+
+  object "**LogisticsOrderSnapshotDO**\n订单快照" as OrderSnapshot {
+    id : Long
+    transOrderId : Long
+    deliveryPackageId : Long
+    splitOrderId : Long
+    splitOrderNo : String
+    pickupOrderId : Long
+  }
+
+  object "**LogisticsOrderSnapshotGoodsDO**\n快照商品明细" as SnapshotGoods {
+    snapshotId : Long
+    skuId : Long
+    skuName : String
+    quantity : Integer
+  }
+
+  object "**LogisticsReachOrderDO**\n到达顺序表" as ReachOrder {
+    transOrderId : Long
+    pickupOrderId : Long
+    deliveryOrderId : Long
+    sequenceNo : Integer
+    reachType : String
+  }
+
+  object "**LogisticsDistributedOrderDO**\n分配订单表" as DistributedOrder {
+    transOrderId : Long
+    splitOrderId : Long
+    splitOrderNo : String
+  }
+
+  ChildSplit ..> VirtualTrans : "拆单完成\n触发运输计划"
+  VirtualTrans ||--o{ VirtualReach : "路径规划"
+  VirtualTrans ..> TransOrder : "FormalTransportationGeneratorBiz\n虚拟→正式运单"
+  TransOrder ||--o{ PickupOrder : "生成取货单\n(按仓库分组)"
+  TransOrder ||--o{ DeliveryOrder : "生成配送单\n(按收货地址分组)"
+  DeliveryOrder ||--o{ DeliveryPackage : "配送包裹"
+  OrderSnapshot ||--o{ SnapshotGoods : "快照明细"
+  ChildSplit ..> OrderSnapshot : "子单→快照关联"
+  ChildSplit ..> DistributedOrder : "子单→分配记录"
+  DeliveryPackage ||--o{ OrderSnapshot : "包裹→快照"
+  PickupOrder ..> OrderSnapshot : "取货单关联快照"
+  TransOrder ||--o{ ReachOrder : "到达顺序"
+}
+
+' ============================================================
+' 阶段 4: 备货 & 拣货
+' ============================================================
+package "阶段4: 备货 & 拣货 (zcyl-supplier)" as P4 #FCE4EC {
+  object "**WmsPickingTask**\n拣货任务" as PickingTask {
+    id : Long
+    warehouseId : Long
+    splitOrderId : Long
+    status : Integer
+    pickerId : Long
+  }
+
+  object "**WmsOutStorageOrderDO**\n出库单" as OutStorage {
+    id : Long
+    outStorageNo : String
+    warehouseId : Long
+    supplierId : Long
+    splitOrderId : Long
+    status : Integer
+    outStorageType : String
+  }
+
+  object "**WmsOutStorageOrderDetailDO**\n出库单明细" as OutStorageDetail {
+    outStorageId : Long
+    skuId : Long
+    quantity : Integer
+    actualQuantity : Integer
+    stockAreaId : Long
+  }
+
+  ChildSplit ..> PickingTask : "待拣货订单\nWmsPickingTaskBiz"
+  PickingTask ..> OutStorage : "拣货完成→生成出库单"
+  OutStorage ||--o{ OutStorageDetail : "1对多"
+}
+
+' ============================================================
+' 阶段 5: 取货 & 配送 & 签收
+' ============================================================
+package "阶段5: 取货 → 配送 → 签收 (zcyl-logis)" as P5 #EDE7F6 {
+  object "**LogisticsDriverBillDO**\n司机账单" as DriverBill {
+    id : Long
+    transOrderId : Long
+    driverId : Long
+    totalFee : Long
+    status : Integer
+  }
+
+  object "**LogisticsDriverBillFeeDetailDO**\n司机账单费用明细" as DriverBillDetail {
+    billId : Long
+    feeType : String
+    amount : Long
+  }
+
+  OutStorage ..> PickupOrder : "出库完成→司机可到仓取货"
+  PickupOrder ..> DeliveryOrder : "取货完成→进入配送阶段\nPickupOrderBiz"
+  DeliveryOrder ..> DriverBill : "配送完成→生成司机账单"
+  DriverBill ||--o{ DriverBillDetail : "费用明细"
+}
+
+' ============================================================
+' 阶段 6: 结算 (可选)
+' ============================================================
+package "阶段6: 结算 (zcyl-supplier)" as P6 #E0F2F1 {
+  object "**PurchaseSettlementBillDO**\n采购结算单" as SettlementBill {
+    billId : Long
+    billNo : String
+    supplierId : Long
+    warehouseId : Long
+    totalAmount : Long
+    status : Integer
+  }
+
+  OutStorage ..> SettlementBill : "出库完成→生成结算单\n(定时任务/实时触发)"
+}
+
+' ============================================================
+' 图例 ============================================================
+legend right
+  **图例说明**
+  |= 阶段 |= 核心单据 |= 关键业务类 |
+  | 1.下单 | MallOrderDO, MallOrderDetailDO, PayChannelPaymentOrderDO | PreOrderService, OrderController |
+  | 2.拆单锁库 | MallOrderBackSplitDO(父/子), MallDispatchLockRecordDO | AutoSplitOrderBiz/ManualSplitOrderBiz, DispatchStockLockResultBiz |
+  | 3.生成运单 | LogisticsTransportationOrderDO, PickupOrderDO, DeliveryOrderDO, OrderSnapshotDO | FormalTransportationGeneratorBiz |
+  | 4.备货拣货 | WmsPickingTask, WmsOutStorageOrderDO | WmsPickingTaskBiz, PickingTaskController |
+  | 5.取货配送 | LogisticsPickupOrderDO, LogisticsDeliveryOrderDO, DriverBillDO | PickupOrderBiz, DeliveryOrderBiz |
+  | 6.结算 | PurchaseSettlementBillDO | SettlementBillCreateTask, PurchaseSettlementBillBiz |
+endlegend
+
+note bottom of MallOrder
+  **正向流程全链路**:
+  ① 用户下单 → MallOrderDO + MallOrderDetailDO
+  ② 支付成功 → PayChannelPaymentOrderDO
+  ③ 自动/手动拆单 → MallOrderBackSplitDO(父→子)
+  ④ 库存锁定请求 → StockOrderDispatchStockLock
+  ⑤ 锁库结果回调 → 全成功/部分成功(生成子单)/全失败
+  ⑥ 虚拟运单→正式运单 (FormalTransportationGeneratorBiz):
+      生成 TransportationOrder + PickupOrder + DeliveryOrder + OrderSnapshot
+  ⑦ 仓内拣货 → WmsPickingTask → WmsOutStorageOrderDO
+  ⑧ 司机取货(PickupOrderBiz) → 配送(DeliveryOrderBiz) → 签收
+  ⑨ 结算单生成 (SettlementBillCreateTask → PurchaseSettlementBillDO)
+end note
+
+' 跨模块关联
+MallOrder ..> ParentSplit : "按供应商+仓库拆单"
+ChildSplit ..> LockRecord : "锁库成功后关联"
+LockRecord ..> StockLock : "跨模块: zcyl-mall → zcyl-stock"
+ChildSplit ..> TransOrder : "跨模块: zcyl-mall → zcyl-logis"
+ChildSplit ..> PickingTask : "跨模块: zcyl-mall → zcyl-supplier"
+OutStorage ..> SettlementBill : "跨模块: 出库→结算"
+
+@enduml

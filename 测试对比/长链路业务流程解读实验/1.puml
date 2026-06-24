@@ -1,0 +1,638 @@
+@startuml 商城正向流程单据流转对象图
+
+title 商城下单→派单→备货→发货 正向全链路单据流转对象图
+
+skinparam object {
+    BackgroundColor<<do>> #E3F2FD
+    BackgroundColor<<msg>> #FFF3E0
+    BackgroundColor<<response>> #F3E5F5
+    BackgroundColor<<enum>> #FFEBEE
+    BackgroundColor<<facade>> #E8F5E9
+}
+
+' ============================================================
+' 阶段一：下单阶段
+' ============================================================
+package "第一阶段：下单（商城模块 zcyl-mall）" as phase1 #F0F8FF {
+
+    object "预选单\nMallPreOrderDO" as preOrder <<do>> {
+        表: mall_pre_order
+        --
+        id
+        creator_id
+        enterprise_id
+        city_id
+        source_type: SELF_CREATED/FROM_SALES
+        status: IN_PROGRESS→COMPLETED→RESCINDED
+        expected_delivery_date
+    }
+
+    object "预选单明细\nMallPreOrderDetailDO" as preOrderDetail <<do>> {
+        表: mall_pre_order_detail
+        --
+        id
+        pre_order_id (FK)
+        sku_id / sku_code
+        sku_name / sku_spec
+        quantity
+        sku_sale_price
+    }
+
+    object "请购单\nMallPurchaseRequestDO" as purchaseRequest <<do>> {
+        表: mall_purchase_request
+        --
+        id
+        enterprise_id
+        city_id
+        budget_type
+        status: PENDING_APPROVAL→APPROVED→RESCINDED
+        total_amount
+    }
+
+    object "请购单明细\nMallPurchaseRequestDetailDO" as purchaseDetail <<do>> {
+        表: mall_purchase_request_detail
+        --
+        id
+        purchase_request_id (FK)
+        sku_id / sku_name
+        quantity / unit_price
+    }
+
+    object "报价单\nMallQuoteOrderDO" as quoteOrder <<do>> {
+        表: mall_quote_order
+        --
+        id
+        purchase_request_id (FK)
+        enterprise_id
+        city_id
+        supplier_id
+        status: PENDING→QUOTED→CONFIRMED
+        total_amount
+    }
+
+    object "报价单明细\nMallQuoteOrderDetailDO" as quoteDetail <<do>> {
+        表: mall_quote_order_detail
+        --
+        id
+        quote_order_id (FK)
+        sku_id / sku_name
+        quoted_price
+        quantity
+    }
+
+    object "购物车\nMallUserCartDO" as userCart <<do>> {
+        表: mall_user_cart
+        --
+        id
+        user_id
+        enterprise_id
+        city_id
+        sku_id / sku_name
+        quantity
+        unit_price
+        selected: 是否选中结算
+    }
+
+    object "【商城订单】\nMallOrderDO" as mallOrder <<do>> {
+        表: mall_order
+        --
+        id (订单主键)
+        user_id / enterprise_id
+        city_id / city_name
+        order_source: PRE_ORDER / SHOPPING_CART
+        purchase_request_id (关联请购单)
+        pre_order_id (关联预购单)
+        product_amount / freight_amount
+        discount_amount / total_amount
+        pay_type: CORPORATE_TRANSFER / PROTOCOL_WITHHOLD
+        transaction_id (关联支付单ID)
+        front_status: PENDING_PAYMENT→PENDING_SHIP
+        back_status: WAITING_DISPATCH
+        refund_status: NO_REFUND/PARTIAL_REFUND/FULL_REFUND
+        cutoff_time (截单时间)
+        expected_delivery_time
+    }
+
+    object "订单明细\nMallOrderDetailDO" as orderDetail <<do>> {
+        表: mall_order_detail
+        --
+        id
+        order_id (FK → mall_order.id)
+        sku_id / sku_code
+        sku_name / sku_spec
+        brand_id / back_category_id
+        unit_price / actual_price
+        quantity / refund_quantity
+        sub_total
+        tax_category_id / tax_rate
+    }
+
+    object "收货地址\nMallOrderAddressDO" as orderAddress <<do>> {
+        表: mall_order_address
+        --
+        id
+        order_id (FK)
+        receiver_name / receiver_phone
+        province_code / province_name
+        city_code / city_name
+        district_code / district_name
+        detail_address
+    }
+
+    object "订单状态历史\nMallOrderStatusHistoryDO" as orderStatusHistory <<do>> {
+        表: mall_order_status_history
+        --
+        id
+        order_id (FK)
+        status_type: FRONT / BACK
+        before_status / after_status
+        operator_id / remark
+    }
+
+    object "下单库存锁定\nStockWarehouseCityOrderLockDO" as orderStockLock <<do>> {
+        表: stock_warehouse_city_order_lock
+        --
+        id
+        order_id / order_detail_id
+        sku_id / city_id
+        warehouse_id / supplier_id
+        lock_quantity
+        lock_status
+        version (乐观锁)
+    }
+
+    ' === 下单阶段关联 ===
+    preOrder ||--o{ preOrderDetail : "1:N 预选单明细"
+    purchaseRequest ||--o{ purchaseDetail : "1:N 请购单明细"
+    quoteOrder ||--o{ quoteDetail : "1:N 报价单明细"
+    purchaseRequest --> quoteOrder : "请购→报价"
+    preOrder ..> mallOrder : "预选单→生成订单\n(order_source=PRE_ORDER)"
+    purchaseRequest ..> mallOrder : "请购单→生成订单\n(经报价确认后)"
+    userCart ..> mallOrder : "购物车→结算生成订单\n(order_source=SHOPPING_CART)"
+    mallOrder ||--o{ orderDetail : "1:N 订单明细"
+    mallOrder ||--|| orderAddress : "1:1 收货地址"
+    mallOrder ||--o{ orderStatusHistory : "1:N 状态变更记录"
+    orderDetail ||--o{ orderStockLock : "1:N 下单时锁库存"
+}
+
+' ============================================================
+' 阶段二：拆单阶段
+' ============================================================
+package "第二阶段：拆单（商城模块 zcyl-mall）" as phase2 #FFF8E1 {
+
+    object "拆分计数器\nMallOrderSplitCounterDO" as splitCounter <<do>> {
+        表: mall_order_split_counter
+        --
+        order_id
+        total_split_count (总拆分次数)
+        current_split_count (当前拆分次数)
+    }
+
+    object "【子单/拆单】\nMallOrderBackSplitDO" as backSplit <<do>> {
+        表: mall_order_back_split
+        --
+        id (子单主键)
+        main_order_id (FK → mall_order.id)
+        parent_split_id (父拆单ID)
+        split_order_no (子单编号)
+        user_id / enterprise_id
+        city_id / city_name
+        product_amount / freight_amount
+        discount_amount / total_amount
+        supplier_id / warehouse_id
+        dispatch_type: MANUAL_DISPATCH / SYSTEM_DISPATCH
+        manual_dispatch_reason
+        dispatch_status: PENDING_DISPATCH→PROCESSING→SUCCESS→FAILED
+        dispatch_time / dispatch_fail_reason
+        confirm_type: SYSTEM_AUTO / SUPPLIER
+        is_split: 0=未拆分 / 1=已拆分
+        status: WAITING_DISPATCH→TO_BE_CONFIRMED→WAITING_DELIVERY→IN_DELIVERY→COMPLETE→CANCELED
+        stock_prepare_order_id (回写备货单ID)
+        cutoff_time / expected_delivery_time
+        version (乐观锁)
+    }
+
+    object "子单明细\nMallOrderBackSplitDetailDO" as backSplitDetail <<do>> {
+        表: mall_order_back_split_detail
+        --
+        id
+        split_order_id (FK → backSplit.id)
+        main_detail_id (FK → mall_order_detail.id)
+        supplier_id / warehouse_id
+        stock_warehouse_id
+        pre_order_lock_ids (预锁库存ID)
+        sku_id / sku_code / sku_name
+        brand_id / back_category_id
+        unit_price / actual_price
+        settlement_price (结算价)
+        split_quantity (拆分数量)
+        stockout_quantity (缺货数量)
+        remaining_quantity (剩余数量)
+        sign_quantity (签收数量)
+        refund_quantity (已退数量)
+        prepare_quantity (备货数量)
+        arrival_quantity (到货数量)
+        confirm_status: UNCONFIRMED→CONFIRMED→PROCESSED
+        confirm_quantity (确认数量)
+    }
+
+    ' === 拆单阶段关联 ===
+    mallOrder ||--o{ backSplit : "1:N 订单拆分为子单"
+    mallOrder ||--|| splitCounter : "1:1 拆分计数"
+    backSplit ||--o{ backSplitDetail : "1:N 子单明细"
+    orderDetail ||--o{ backSplitDetail : "1:N 关联主单明细\n(main_detail_id)"
+    backSplit ||--o{ backSplit : "N:1 父子拆单\n(parent_split_id)"
+}
+
+' ============================================================
+' 阶段三：派单与库存锁定
+' ============================================================
+package "第三阶段：派单与库存锁定（商城+库存模块）" as phase3 #E8F5E9 {
+
+    object "派单锁记录\nMallDispatchLockRecordDO" as dispatchLockRecord <<do>> {
+        表: mall_dispatch_lock_record
+        --
+        id
+        split_order_id (FK → backSplit.id)
+        split_order_detail_id (FK → backSplitDetail.id)
+        lock_level: WAREHOUSE / AREA
+        stock_id (库存ID)
+        op_type: LOCK
+        before_stock (操作前可供库存)
+        stock (操作数量)
+        after_stock (操作后可供库存)
+    }
+
+    object "派单锁库消息\nDispatchLockStockMsg" as dispatchLockMsg <<msg>> {
+        split_id (子单ID)
+        warehouse_id
+        supplier_id
+        city_id
+        sku_list: [{sku_id, lock_quantity}]
+    }
+
+    object "锁库结果消息\nDispatchLockResultMsg" as lockResultMsg <<msg>> {
+        split_id
+        success (是否成功)
+        fail_reason
+        lock_detail_list
+    }
+
+    object "仓库库存\nStockWarehouseDO" as stockWarehouse <<do>> {
+        表: stock_warehouse
+        --
+        id
+        sku_id
+        supplier_id
+        warehouse_id
+        stock (总库存)
+        lock_stock (锁定库存)
+        available_stock (可用库存 = stock - lock_stock)
+        version (乐观锁)
+    }
+
+    object "库区库存明细\nStockWarehouseAreaDetailDO" as stockAreaDetail <<do>> {
+        表: stock_warehouse_area_detail
+        --
+        id
+        stock_warehouse_id (FK)
+        area_id
+        stock / lock_stock
+    }
+
+    object "仓库城市维度库存\nStockWarehouseCityDO" as stockWarehouseCity <<do>> {
+        表: stock_warehouse_city
+        --
+        id
+        warehouse_id
+        city_id
+        sku_id
+        stock / lock_stock / sale_stock
+        version
+    }
+
+    ' === 派单阶段关联 ===
+    backSplit ||--o{ dispatchLockRecord : "1:N 派单锁库记录"
+    backSplit --> dispatchLockMsg : "触发→派单锁库消息"
+    dispatchLockMsg --> stockWarehouse : "锁定仓库库存"
+    dispatchLockMsg --> stockAreaDetail : "锁定库区库存"
+    stockWarehouse --> lockResultMsg : "锁库结果回调"
+    lockResultMsg --> backSplit : "更新子单dispatch_status"
+    stockWarehouse ||--o{ stockAreaDetail : "1:N 仓库→库区"
+    stockWarehouse ||--o{ stockWarehouseCity : "1:N 仓库→城市维度"
+}
+
+' ============================================================
+' 阶段四：备货阶段
+' ============================================================
+package "第四阶段：备货（供应商模块 zcyl-supplier）" as phase4 #F3E5F5 {
+
+    object "备货单生成消息\nWmsStockPrepareOrderMsg" as prepareMsg <<msg>> {
+        split_ids (拆单ID列表)
+        warehouse_id
+        supplier_id
+        current_user_id
+    }
+
+    object "【备货单】\nWmsStockPrepareOrderDO" as stockPrepareOrder <<do>> {
+        表: wms_stock_prepare_order
+        编号前缀: BHD
+        --
+        id
+        code (备货单号)
+        supplier_id
+        warehouse_id
+        delivery_warehouse_id (配送仓库ID，协同仓ID)
+        delivery_warehouse_address (配送仓地址)
+        delivery_warehouse_coordinate (配送仓经纬度)
+        status: PENDING_PREPARE→PENDING_DELIVERY→COMPLETED
+        prepare_deadline (备货截止时间)
+        delivery_deadline (送货截止时间)
+        complete_prepare_time (完成备货时间)
+        complete_delivery_time (完成送货时间)
+    }
+
+    object "备货单明细\nWmsStockPrepareOrderDetailDO" as stockPrepareDetail <<do>> {
+        表: wms_stock_prepare_order_detail
+        --
+        id
+        stock_prepare_order_id (FK)
+        city_id
+        sku_id / sku_code / sku_name
+        sku_spec / brand_id / back_category_id
+        unit_price (下单单价 分)
+        actual_price (实际价格 分)
+        settlement_price (结算价 分)
+        confirm_quantity (接单数量)
+        actual_stock_quantity (实际备货数)
+    }
+
+    object "备货单状态枚举\nWmsStockPrepareOrderStatusEnum" as prepareStatusEnum <<enum>> {
+        PENDING_PREPARE = "待备货"
+        PENDING_DELIVERY = "待送货"
+        COMPLETED = "已完成"
+    }
+
+    ' === 备货阶段关联 ===
+    backSplit --> prepareMsg : "派单成功后→发送备货消息"
+    prepareMsg --> stockPrepareOrder : "消息驱动→生成备货单"
+    backSplit --> stockPrepareOrder : "1:N 子单关联备货单\n(stock_prepare_order_id回写)"
+    stockPrepareOrder ||--o{ stockPrepareDetail : "1:N 备货单明细"
+    stockPrepareOrder .> prepareStatusEnum : "状态枚举"
+}
+
+' ============================================================
+' 阶段五：拣货与出库
+' ============================================================
+package "第五阶段：拣货与出库（WMS仓内作业）" as phase5 #E0F2F1 {
+
+    object "拣货任务\nWmsPickingTaskDO" as pickingTask <<do>> {
+        表: wms_picking_task
+        --
+        id
+        task_no (任务编号)
+        warehouse_id
+        mall_order_id (关联主订单)
+        split_order_id (关联子单)
+        split_order_no (子单编号)
+        status: pending→picking→outbound→canceled
+        picker_id (拣货员)
+        order_cutoff_time (订单截单时间)
+        completed_time (完成时间)
+    }
+
+    object "拣货任务明细\nWmsPickingTaskDetailDO" as pickingTaskDetail <<do>> {
+        表: wms_picking_task_detail
+        --
+        id
+        picking_task_id (FK)
+        main_detail_id / split_detail_id
+        sku_id / sku_name
+        plan_pick_count (计划拣货数)
+        actual_pick_count (实际拣货数)
+    }
+
+    object "出库单\nWmsOutStorageOrderDO" as outStorageOrder <<do>> {
+        表: wms_out_storage_order
+        --
+        id
+        code (出库单号)
+        type (出库类型)
+        out_storage_type
+        source_order_no (来源单号)
+        warehouse_id
+        status
+        out_storage_time (出库时间)
+    }
+
+    object "库存出库单据\nSupplierStockOrderDO" as stockOrder <<do>> {
+        表: stock_warehouse_order
+        --
+        id
+        order_no (单据号)
+        order_type: 1=入库 / 2=出库
+        source_type: 10=其他入库, 11=退货入库, 20=其他出库, 21=销售出库
+        source_no (来源单号)
+        supplier_id / warehouse_id
+        quantity
+    }
+
+    object "库存出库明细\nSupplierStockOrderDetailDO" as stockOrderDetail <<do>> {
+        表: stock_warehouse_order_detail
+        --
+        id
+        order_id (FK)
+        sku_id / sku_code / sku_name
+        plan_quantity
+        actual_quantity
+    }
+
+    ' === 拣货出库关联 ===
+    stockPrepareOrder ||--o{ pickingTask : "1:N 备货单→拣货任务"
+    backSplit ||--o{ pickingTask : "1:N 子单→拣货任务"
+    pickingTask ||--o{ pickingTaskDetail : "1:N 拣货明细"
+    pickingTask --> outStorageOrder : "拣货完成→生成出库单"
+    stockPrepareOrder --> outStorageOrder : "备货完成→触发出库"
+    outStorageOrder ||--o{ stockOrder : "出库→库存单据\n(source_no=出库单号)"
+    stockOrder ||--o{ stockOrderDetail : "1:N 库存明细"
+}
+
+' ============================================================
+' 阶段六：物流配送调度
+' ============================================================
+package "第六阶段：物流配送调度（物流模块 zcyl-logis）" as phase6 #FFEBEE {
+
+    object "【已派物流单】\nLogisticsDistributedOrderDO" as distributedOrder <<do>> {
+        表: logistics_distributed_order
+        --
+        id
+        split_order_no (子单编号)
+        transportation_order_id (FK → 运单ID)
+    }
+
+    object "【取送运单】\nLogisticsTransportationOrderDO" as transportOrder <<do>> {
+        表: logistics_transportation_order
+        --
+        id
+        trans_order_no (运单编号)
+        city_code
+        driver_id / vehicle_id
+        planning_mileage (规划里程 米)
+        expected_income / actual_income (物流费 分)
+        status: -1=未生效→100=待接单→200=取货中→400=配送中→600=已完成→11000=已取消
+        distribute_type: 1=城配, 2=干线, 3=调拨
+        planned_start_time (计划配送时间)
+        start_time (出发取货时间)
+        first_pickup_time (首单取货完成)
+        complete_pickup_time (取货完成)
+        deliver_finish_time (配送完成)
+        pickup_point_amount / delivery_point_amount
+        pickup_mileage / delivery_mileage
+        goods_amount / sku_amount
+        total_goods_amount (商品总金额)
+    }
+
+    object "取送顺序\nLogisticsReachOrderDO" as reachOrder <<do>> {
+        表: logistics_reach_order
+        --
+        id
+        transportation_order_id (FK)
+        version
+        order_detail (逗号分隔的取货单/配送单ID)
+        current_order_id (进行中的取/送单ID)
+        modify_way (修改方式)
+    }
+
+    object "【取货单】\nLogisticsPickupOrderDO" as pickupOrder <<do>> {
+        表: logistics_pickup_order
+        --
+        id
+        supplier_id (供应商ID)
+        warehouse_id (仓库ID)
+        transportation_order_id (FK → 运单ID)
+        status: 00=未到达→20=已到达→40=已完成→50=已取消
+        receipt_url (回执单图片)
+        estimate_arrive_time (预计到达)
+        arrive_time (实际到达)
+        start_time (开始取货)
+        finish_time (取货完成)
+        complete_type (完成方式)
+        goods_kind_total / goods_total
+    }
+
+    object "【配送单/送货单】\nLogisticsDeliveryOrderDO" as logisticsDeliveryOrder <<do>> {
+        表: logistics_delivery_order
+        --
+        id
+        receiver_id (收货店铺/仓库ID)
+        enterprise_id
+        transportation_order_id (FK → 运单ID)
+        type: 1=配送单, 2=退取货单, 3=送+退取货
+        status: 00=未到达→20=已到达→40=已完成→80=无法送达→90=已取消
+        estimate_arrive_time
+        arrive_time (到达时间)
+        start_time (开始配送)
+        finish_time (配送完成)
+        goods_total / goods_kind_total
+    }
+
+    object "包裹单\nLogisticsDeliveryOrderPackageDO" as package <<do>> {
+        表: logistics_delivery_order_package
+        --
+        id
+        main_order_id (主订单ID)
+        transportation_order_id (FK)
+        delivery_order_id (FK)
+        delivery_order_status: 10=未签收→20=已签收→30=用户拒收→50=无法送达→60=已取消
+        complete_time
+        complete_type
+    }
+
+    object "订单快照\nLogisticsOrderSnapshotDO" as orderSnapshot <<do>> {
+        表: logistics_order_snapshot
+        --
+        id
+        split_order_id / split_order_no (子单关联)
+        transportation_order_id (FK → 运单)
+        pickup_order_id (FK → 取货单)
+        delivery_order_id (FK → 配送单)
+        receiver_id
+        order_status: 000=初始化→200=取货核对完成→400=取货完成→600=配送核对完成→800=配送完成→10001=无法送达→10002=整单拒收
+        pickup_confirm_time / delivery_confirm_time
+        goods_amount (商品总金额)
+        goods_count / goods_kind
+        supplier_id
+        expected_income / actual_income
+    }
+
+    object "订单商品快照\nLogisticsOrderSnapshotGoodsDO" as snapshotGoods <<do>> {
+        表: logistics_order_snapshot_goods
+        --
+        id
+        transportation_order_id (FK)
+        order_id / order_detail_id
+        supplier_id / goods_id
+        init_amount (原始数量)
+        prepare_bill_id (备货单ID)
+        stocking_amount (备货数量)
+        pickup_amount (取货数量)
+        delivery_amount (送达数量)
+        return_amount (退货数量)
+        stockout_amount (缺货数量=下单-取货)
+        actual_amount (用户签收数量)
+    }
+
+    ' === 物流阶段关联 ===
+    backSplit ||--o{ distributedOrder : "1:N 子单→已派物流单\n(split_order_no)"
+    distributedOrder --> transportOrder : "关联运单\n(transportation_order_id)"
+    transportOrder ||--|| reachOrder : "1:1 取送顺序"
+    transportOrder ||--o{ pickupOrder : "1:N 运单→取货点\n(每个仓库/供应商一个)"
+    transportOrder ||--o{ logisticsDeliveryOrder : "1:N 运单→配送点\n(每个收货点一个)"
+    logisticsDeliveryOrder ||--o{ package : "1:N 配送单→包裹"
+    backSplit ||--o{ orderSnapshot : "1:N 子单→物流快照"
+    transportOrder --> orderSnapshot : "运单→快照"
+    pickupOrder --> orderSnapshot : "取货单→快照"
+    logisticsDeliveryOrder --> orderSnapshot : "配送单→快照"
+    orderSnapshot ||--o{ snapshotGoods : "1:N 快照→商品明细"
+    snapshotGoods --> stockPrepareOrder : "关联备货单\n(prepare_bill_id)"
+}
+
+' ============================================================
+' 全局流转总结
+' ============================================================
+note as GlobalFlow
+  <b>📋 商城正向全链路单据流转总结：</b>
+
+  <b>【下单阶段】</b>
+  预选单/请购单 → 报价单 → 购物车结算 → <b>商城主订单(MallOrderDO)</b>
+  订单状态: PENDING_PAYMENT → PENDING_SHIP
+
+  <b>【拆单阶段】</b>
+  订单付款后 → 按供应商/仓库拆分为 <b>子单(MallOrderBackSplitDO)</b>
+  子单状态: WAITING_DISPATCH → TO_BE_CONFIRMED → WAITING_DELIVERY → IN_DELIVERY → COMPLETE
+
+  <b>【派单阶段】</b>
+  子单 → 自动/手动派单 → <b>派单锁记录(MallDispatchLockRecordDO)</b> → 锁定仓库库存
+  派单状态: PENDING_DISPATCH → PROCESSING → SUCCESS
+
+  <b>【备货阶段】</b>
+  派单成功 → 消息驱动 → <b>备货单(WmsStockPrepareOrderDO)</b>
+  备货状态: PENDING_PREPARE → PENDING_DELIVERY → COMPLETED
+
+  <b>【拣货出库】</b>
+  备货单 → 拣货任务(WmsPickingTaskDO) → 出库单(WmsOutStorageOrderDO) → 库存出库(SupplierStockOrderDO)
+
+  <b>【物流配送】</b>
+  子单 → 已派物流单(LogisticsDistributedOrderDO) → 运单(LogisticsTransportationOrderDO)
+  → 取货单(LogisticsPickupOrderDO) + 配送单(LogisticsDeliveryOrderDO) + 包裹单(LogisticsDeliveryOrderPackageDO)
+  运单状态: -1(未生效)→100(待接单)→200(取货中)→400(配送中)→600(已完成)
+
+  <b>关键跨模块消息流转：</b>
+  • OrderDispatchMsg → 触发派单流程
+  • DispatchLockStockMsg → 库存模块锁定库存
+  • WmsStockPrepareOrderMsg → 供应商模块生成备货单
+  • SubOrderDeliveryBiz → 监听配送确认，更新子单状态
+  • FundUnfreezeTask → 配送完成后解冻资金
+end note
+
+@enduml
