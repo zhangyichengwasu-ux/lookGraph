@@ -19,9 +19,14 @@ python3 install.py
 
 **安装内容**:
 - ✅ 复制所有 hook 脚本到 `~/.claude/hooks/lookgraph/`
+- ✅ 安装模式切换 skills 到 `<project>/.claude/skills/`（项目级别）
+  - `look_graph/SKILL.md` - 进入 LookGraph 模式
+  - `exit_look_graph/SKILL.md` - 退出 LookGraph 模式
 - ✅ 创建 `~/.claude/CLAUDE.md` 文档（使用模板）
 - ✅ 设置执行权限
 - ✅ 生成 README 文档
+
+**注意**: Skills 安装在项目级别（`<project>/.claude/skills/`），每个项目独立配置。
 
 ## 卸载
 
@@ -32,6 +37,8 @@ python3 uninstall.py
 
 **卸载内容**:
 - 删除 `~/.claude/hooks/lookgraph/` 目录
+- 删除项目级别的 skills：`<project>/.claude/skills/look_graph/` 和 `exit_look_graph/`
+- 删除全局 skills（如果存在）：`~/.claude/skills/look_graph.skill.md` 和 `exit_look_graph.skill.md`
 - 删除 `~/.claude/CLAUDE.md`（如果包含 LookGraph 内容）
 - 清理 `settings.json` 中的旧配置
 
@@ -48,7 +55,43 @@ pip install requests
 
 安装完成后，Claude 会自动识别 LookGraph 工具。
 
-你可以直接问 Claude：
+### 模式切换
+
+#### 进入 LookGraph 模式
+```
+/look_graph
+```
+
+进入后，Claude 会优先使用 LookGraph API 来分析代码：
+- ✅ 使用 `semantic_search.py` 代替 `Grep` 搜索代码
+- ✅ 使用 `class_context.py` 代替 `Read` 理解类
+- ✅ 使用 `method_context.py` 获取方法详情和依赖
+- ✅ 使用 `impact_analysis.py` 评估修改影响
+- ✅ 自动创建语义注释
+
+**适用场景**：
+- 分析陌生代码库
+- 理解复杂业务逻辑
+- 追踪依赖和调用链
+- 评估变更影响
+- 按业务意图搜索代码
+
+#### 退出 LookGraph 模式
+```
+/exit_look_graph
+```
+
+恢复使用标准工具（`Grep`、`Glob`、`Read`）。
+
+**适用场景**：
+- 编辑配置文件
+- 阅读文档
+- 搜索非代码模式
+- 标准文件操作
+
+### 直接使用（无需模式切换）
+
+你也可以直接问 Claude：
 ```
 "使用 lookgraph 列出所有项目"
 "用 lookgraph 初始化当前项目"

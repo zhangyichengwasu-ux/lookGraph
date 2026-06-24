@@ -11,10 +11,13 @@ import shutil
 from pathlib import Path
 
 HOOKS_DIR = Path.home() / ".claude" / "hooks" / "lookgraph"
+SKILLS_DIR = Path.home() / ".claude" / "skills"
 SETTINGS_FILE = Path.home() / ".claude" / "settings.json"
 SCRIPT_DIR = Path(__file__).parent.resolve()
 # Hook scripts are in the sibling 'hook' directory
 HOOK_SOURCE_DIR = SCRIPT_DIR.parent / "hook"
+# Skill files are in the 'skills' subdirectory
+SKILL_SOURCE_DIR = SCRIPT_DIR / "skills"
 
 # Define all hooks with their metadata
 HOOKS = [
@@ -144,6 +147,11 @@ def create_hooks_directory():
     HOOKS_DIR.mkdir(parents=True, exist_ok=True)
     print(f"✓ Created hooks directory: {HOOKS_DIR}")
 
+def create_skills_directory():
+    """Create the skills directory if it doesn't exist"""
+    SKILLS_DIR.mkdir(parents=True, exist_ok=True)
+    print(f"✓ Created skills directory: {SKILLS_DIR}")
+
 def copy_hook_scripts():
     """Copy all hook scripts to the hooks directory"""
     copied = []
@@ -172,6 +180,174 @@ def copy_hook_scripts():
             print(f"✗ Missing: {hook['file']}", file=sys.stderr)
             return False
 
+    return True
+
+def install_skills(install_mode="global"):
+    """Install LookGraph mode toggle skills
+
+    Args:
+        install_mode: "global" to install to ~/.claude/skills/ (available in all projects)
+                      "project" to install to <project>/.claude/skills/ (current project only)
+    """
+    if install_mode == "global":
+        # Install to global skills directory (available in all projects)
+        skills_base_dir = Path.home() / ".claude" / "skills"
+        location_label = "global (~/.claude/skills/)"
+    else:
+        # Install to project skills directory (current project only)
+        project_root = Path(__file__).parent.parent
+        skills_base_dir = project_root / ".claude" / "skills"
+        location_label = f"project ({skills_base_dir.relative_to(project_root)}/)"
+
+    # Create skills directory if it doesn't exist
+    skills_base_dir.mkdir(parents=True, exist_ok=True)
+
+    skills = [
+        {
+            "name": "look_graph",
+            "content": """---
+name: look_graph
+description: Enter LookGraph mode - prioritize using LookGraph API for all code analysis, search, and context loading
+---
+
+# LookGraph Mode
+
+You are now in **LookGraph Mode**.
+
+## Core Behavior Changes
+
+When in LookGraph mode, you MUST follow these priorities:
+
+### 1. Code Search & Discovery
+- ❌ **DON'T** use `Grep` or `Glob` directly for code search
+- ✅ **DO** use `semantic_search.py` to find code by business intent
+- ✅ **DO** use `project_summary.py` to understand overall structure first
+
+### 2. Reading Code Context
+- ❌ **DON'T** use `Read` tool directly to read source files
+- ✅ **DO** use `class_context.py` to get class overview with relationships
+- ✅ **DO** use `method_context.py` to get method details with call chains
+
+### 3. Understanding Dependencies
+- ❌ **DON'T** manually trace imports and calls
+- ✅ **DO** use `class_relations.py` to see dependencies
+- ✅ **DO** use `method_callchain.py` to see call relationships
+
+### 4. Impact Analysis
+- ❌ **DON'T** manually search for usages
+- ✅ **DO** use `impact_analysis.py` before modifying code
+
+## Workflow
+
+### Starting Analysis
+```bash
+# 1. Check if project is initialized
+python3 ~/.claude/hooks/lookgraph/project_list.py
+
+# 2. If not initialized, init first
+python3 ~/.claude/hooks/lookgraph/project_init.py /path/to/project ProjectName
+
+# 3. Get project overview
+python3 ~/.claude/hooks/lookgraph/project_summary.py <project_id>
+```
+
+### Finding Code
+```bash
+# Use semantic search instead of grep
+python3 ~/.claude/hooks/lookgraph/semantic_search.py <project_id> "business description" 10
+```
+
+### Understanding Code
+```bash
+# Get class context instead of reading file
+python3 ~/.claude/hooks/lookgraph/class_context.py <class_id>
+
+# Get method details with dependencies
+python3 ~/.claude/hooks/lookgraph/method_context.py <method_id>
+```
+
+### Saving Knowledge
+After understanding code, create semantic annotations:
+```bash
+python3 ~/.claude/hooks/lookgraph/semantic_annotate.py \\
+  --project-id <project_id> \\
+  --project-path /path/to/project \\
+  --package com.example \\
+  --class ClassName \\
+  --type CLASS \\
+  --content "Business meaning of this class" \\
+  --source AI
+```
+
+## When to Fall Back to Traditional Tools
+
+You MAY use `Read`, `Grep`, `Glob` ONLY when:
+- Reading configuration files (JSON, YAML, properties)
+- Reading documentation (README, markdown)
+- Searching for non-code patterns (log messages, comments)
+- The project is not initialized in LookGraph
+
+## Current Project Context
+
+**IMPORTANT**: At the start of each conversation in LookGraph mode:
+1. Run `project_list.py` to find the current project
+2. If found, save the `projectId` in memory
+3. Run `project_summary.py` to understand the codebase
+4. Keep `projectId` available for all subsequent operations
+
+## Exit
+
+To exit LookGraph mode, user should run: `/exit_look_graph`
+
+---
+
+**LookGraph Mode is now ACTIVE** 🔍
+"""
+        },
+        {
+            "name": "exit_look_graph",
+            "content": """---
+name: exit_look_graph
+description: Exit LookGraph mode and return to default file-based code analysis
+---
+
+# Exit LookGraph Mode
+
+You have exited **LookGraph Mode**.
+
+## Behavior Restored
+
+You can now use standard tools freely:
+- ✅ `Grep` - search code with regex patterns
+- ✅ `Glob` - find files by pattern
+- ✅ `Read` - read source files directly
+- ✅ Manual code tracing and analysis
+
+LookGraph tools are still available if explicitly requested by the user, but they are no longer the default priority.
+
+## Re-entering LookGraph Mode
+
+To re-enter LookGraph mode, user should run: `/look_graph`
+
+---
+
+**LookGraph Mode is now INACTIVE** ⚪
+"""
+        }
+    ]
+
+    for skill in skills:
+        # Create skill directory: skills/<skill_name>/
+        skill_dir = skills_base_dir / skill["name"]
+        skill_dir.mkdir(exist_ok=True)
+
+        # Write SKILL.md file
+        skill_file = skill_dir / "SKILL.md"
+        with open(skill_file, 'w') as f:
+            f.write(skill["content"])
+        print(f"✓ Installed skill: {skill['name']} → {skill_dir}/SKILL.md")
+
+    print(f"✓ Skills installed to {location_label}")
     return True
 
 def load_settings():
@@ -282,8 +458,30 @@ python3 ~/.claude/hooks/lookgraph/project_list.py
     print(f"✓ Generated README: {readme_path}")
 
 def main():
+    # Parse command line arguments
+    import argparse
+    parser = argparse.ArgumentParser(
+        description="LookGraph Installation Script",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Installation modes:
+  global  - Install skills to ~/.claude/skills/ (available in all projects)
+  project - Install skills to <project>/.claude/skills/ (current project only)
+
+Default is 'global' for convenience.
+"""
+    )
+    parser.add_argument(
+        '--mode',
+        choices=['global', 'project'],
+        default='global',
+        help='Installation mode (default: global)'
+    )
+    args = parser.parse_args()
+
     print("=" * 60)
     print("LookGraph Hooks Installation")
+    print(f"Mode: {args.mode.upper()}")
     print("=" * 60)
     print()
 
@@ -292,22 +490,34 @@ def main():
     create_hooks_directory()
     print()
 
-    # Step 2: Copy hook scripts
-    print("Step 2: Copying hook scripts...")
+    # Step 2: Create skills directory (deprecated, but keep for compatibility)
+    print("Step 2: Creating skills directory...")
+    create_skills_directory()
+    print()
+
+    # Step 3: Copy hook scripts
+    print("Step 3: Copying hook scripts...")
     if not copy_hook_scripts():
         print("\n✗ Installation failed: Some hook scripts are missing")
         sys.exit(1)
     print()
 
-    # Step 3: Register hooks
-    print("Step 3: Creating CLAUDE.md documentation...")
+    # Step 4: Install skills
+    print(f"Step 4: Installing LookGraph mode toggle skills ({args.mode})...")
+    if not install_skills(install_mode=args.mode):
+        print("\n✗ Installation failed: Could not install skills")
+        sys.exit(1)
+    print()
+
+    # Step 5: Register hooks
+    print("Step 5: Creating CLAUDE.md documentation...")
     if not register_hooks():
         print("\n✗ Installation failed: Could not create CLAUDE.md")
         sys.exit(1)
     print()
 
-    # Step 4: Generate README
-    print("Step 4: Generating README...")
+    # Step 6: Generate README
+    print("Step 6: Generating README...")
     generate_readme()
     print()
 
@@ -316,13 +526,30 @@ def main():
     print("=" * 60)
     print()
     print("Hooks installed to:", HOOKS_DIR)
+    if args.mode == "global":
+        print("Skills installed to: ~/.claude/skills/ (global - all projects)")
+    else:
+        project_root = Path(__file__).parent.parent
+        print(f"Skills installed to: {project_root}/.claude/skills/ (project only)")
     print("Documentation created:", Path.home() / ".claude" / "CLAUDE.md")
     print()
     print("✓ Claude can now recognize and use LookGraph tools!")
     print()
+    print("Available commands:")
+    print("  /look_graph       - Enter LookGraph mode (prioritize LookGraph API)")
+    print("  /exit_look_graph  - Exit LookGraph mode (use standard tools)")
+    print()
     print("Example usage:")
-    print("  Ask Claude: 'Use lookgraph to list all projects'")
-    print("  Ask Claude: 'Initialize this project with lookgraph'")
+    print("  1. Restart Claude Code")
+    print("  2. Type: /look_graph")
+    print("  3. Ask Claude: 'Initialize this project with lookgraph'")
+    print("  4. Ask Claude: 'Find the user login logic'")
+    print()
+    if args.mode == "global":
+        print("✓ Skills are available in ALL projects after restart")
+    else:
+        print("⚠ Skills are only available in this project")
+        print("  To install globally: python3 install.py --mode global")
     print()
     print("Note: Make sure the LookGraph server is running at http://localhost:8090")
     print("      Start it with: cd /path/to/lookGraph && bash run.sh &")

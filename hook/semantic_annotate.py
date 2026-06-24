@@ -114,10 +114,14 @@ def main():
         if args.reason:
             print(f"  原因: {args.reason}")
 
-        # 触发向量更新
-        print("\n正在更新向量索引...")
-        client.post(f"/api/project/update", params={"projectId": args.project_id})
-        print("✓ 向量索引已更新")
+        # 触发精确的向量更新（只更新这一条）
+        history_id = result.get("data", {}).get("historyId")
+        if history_id:
+            print("\n正在更新向量索引...")
+            client.post(f"/api/semantic/{history_id}/index", params={"projectId": args.project_id})
+            print("✓ 向量索引已更新")
+        else:
+            print("\n⚠ 警告: 未获取到注释 ID，跳过向量更新")
 
         print("\n提示: 下次使用语义搜索时可以找到这个注释")
 

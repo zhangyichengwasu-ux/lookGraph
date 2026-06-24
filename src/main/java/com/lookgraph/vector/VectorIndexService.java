@@ -78,6 +78,29 @@ public class VectorIndexService {
         chromaClient.deleteByMetadata(CODE_SEMANTICS, Map.of("file_path", filePath));
     }
 
+    public void indexSingleSemantic(String entityId, String entityType, String content, String projectId) {
+        if (!StringUtils.hasText(content)) {
+            log.warn("注释内容为空，跳过向量化: entityId={}", entityId);
+            return;
+        }
+
+        float[] embedding = embeddingProvider.embed(content);
+        Map<String, Object> meta = new HashMap<>();
+        meta.put("entity_id", entityId);
+        meta.put("entity_type", entityType.toLowerCase());
+        meta.put("file_path", "");
+        meta.put("module_name", "");
+        meta.put("project_id", projectId);
+
+        chromaClient.upsert(CODE_SEMANTICS,
+                List.of(entityId),
+                List.of(embedding),
+                List.of(content),
+                List.of(meta));
+
+        log.info("单条语义注释向量化完成: entityId={}, type={}", entityId, entityType);
+    }
+
     public void indexProjectOverview(String projectId, String summary) {
         float[] embedding = embeddingProvider.embed(summary);
         chromaClient.upsert(PROJECT_OVERVIEW,

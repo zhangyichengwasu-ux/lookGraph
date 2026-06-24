@@ -1,10 +1,12 @@
 package com.lookgraph.service;
 
+import com.lookgraph.common.exception.BizException;
 import com.lookgraph.domain.entity.SemanticHistory;
 import com.lookgraph.domain.repository.jpa.SemanticHistoryRepository;
 import com.lookgraph.dto.request.SemanticUpdateRequest;
 import com.lookgraph.dto.response.SemanticHistoryResponse;
 import com.lookgraph.dto.response.SemanticResponse;
+import com.lookgraph.vector.VectorIndexService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +20,7 @@ import java.util.stream.Collectors;
 public class SemanticService {
 
     private final SemanticHistoryRepository semanticHistoryRepository;
+    private final VectorIndexService vectorIndexService;
 
     public List<SemanticResponse> getByGitCommitHash(String gitCommitHash) {
         List<SemanticHistory> histories = semanticHistoryRepository
@@ -76,6 +79,20 @@ public class SemanticService {
         entity.setCreateTime(LocalDateTime.now());
         SemanticHistory saved = semanticHistoryRepository.save(entity);
         return toResponse(saved);
+    }
+
+    @Transactional("jpaTransactionManager")
+    public void indexSemanticById(Long id, String projectId) {
+        SemanticHistory semantic = semanticHistoryRepository.findById(id)
+                .orElseThrow(() -> new BizException("语义注释不存在: " + id));
+
+        String entityId = buildEntityId(semantic);
+        vectorIndexService.indexSingleSemantic(
+                entityId,
+                semantic.getType().name(),
+                semantic.getContent(),
+                projectId
+        );
     }
 
     private SemanticResponse toResponse(SemanticHistory entity) {

@@ -65,4 +65,11 @@ public class SemanticController {
     public Result<SemanticResponse> createSemantic(@RequestBody @Valid SemanticHistory entity) {
         return Result.ok(semanticService.createSemantic(entity));
     }
+
+    @PostMapping("/{id}/index")
+    @Operation(summary = "触发单条注释的向量索引")
+    public Result<Void> indexSemantic(@PathVariable Long id, @RequestParam String projectId) {
+        semanticService.indexSemanticById(id, projectId);
+        return Result.ok();
+    }
 }

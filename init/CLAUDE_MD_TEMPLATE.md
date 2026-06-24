@@ -1,5 +1,24 @@
 # LookGraph 代码地图助手
 
+## ⚠️ 重要：何时使用 LookGraph
+
+**当用户要求理解、分析、查找代码时，优先使用 LookGraph，而不是直接 Grep/Read。**
+
+典型触发词：
+- "帮我理解这个类/方法"
+- "xxx 功能在哪里？"
+- "这个项目是做什么的？"
+- "修改 xxx 会影响哪些地方？"
+- "查找/搜索 xxx 相关代码"
+
+**工作流程**：
+1. 先用 `project_list.py` 检查项目是否已初始化
+2. 如果未初始化，先运行 `project_init.py`
+3. 使用 `semantic_search.py` 或 `class_context.py` 快速定位
+4. 理解代码后，用 `semantic_annotate.py` 保存业务语义
+
+---
+
 ## 概述
 
 LookGraph 是一个代码分析和语义搜索系统，使用：
@@ -269,7 +288,7 @@ python3 ~/.claude/hooks/lookgraph/semantic_annotate.py \
 
 **自动功能**:
 - 自动获取 git commit hash
-- 自动触发向量索引更新
+- 自动触发向量索引更新（增量更新，只更新当前注释，秒级完成）
 - 自动保存注释历史
 
 **何时使用**:
@@ -485,40 +504,125 @@ python3 ~/.claude/hooks/lookgraph/class_context.py <class_id>
 
 ---
 
-## 使用建议
+## LookGraph 模式行为准则
 
-### 当用户问 "这个项目是做什么的？"
+### 进入 LookGraph 模式后 (`/look_graph`)
 
+**核心原则**: 所有代码相关的搜索、定位、理解操作，优先使用 LookGraph API，而不是传统的 Grep/Read 工具。
+
+### 工具选择优先级
+
+#### ✅ 必须使用 LookGraph 的场景
+
+1. **搜索代码**
+   - ❌ 不要使用 `Grep` 搜索代码内容
+   - ✅ 使用 `semantic_search.py` 通过业务描述或功能名称搜索
+   ```bash
+   python3 ~/.claude/hooks/lookgraph/semantic_search.py <project_id> "描述" 10
+   ```
+
+2. **理解类结构**
+   - ❌ 不要使用 `Read` 直接读取源文件
+   - ✅ 使用 `class_context.py` 获取类的结构化上下文（包含依赖、注释、方法签名）
+   ```bash
+   python3 ~/.claude/hooks/lookgraph/class_context.py <class_id>
+   ```
+
+3. **理解方法实现**
+   - ❌ 不要手动查找方法定义
+   - ✅ 使用 `method_context.py` 获取方法上下文（包含调用关系、参数、返回值）
+   ```bash
+   python3 ~/.claude/hooks/lookgraph/method_context.py <method_id>
+   ```
+
+4. **查找依赖关系**
+   - ❌ 不要手动追踪 import 语句
+   - ✅ 使用 `class_relations.py` 获取继承、实现、依赖关系
+   ```bash
+   python3 ~/.claude/hooks/lookgraph/class_relations.py <class_id>
+   ```
+
+5. **评估修改影响**
+   - ❌ 不要手动搜索引用
+   - ✅ 使用 `impact_analysis.py` 获取影响范围
+   ```bash
+   python3 ~/.claude/hooks/lookgraph/impact_analysis.py METHOD <method_id>
+   ```
+
+6. **追踪调用链**
+   - ❌ 不要手动逐层查找调用
+   - ✅ 使用 `method_callchain.py` 获取完整调用链
+   ```bash
+   python3 ~/.claude/hooks/lookgraph/method_callchain.py <method_id>
+   ```
+
+#### ⚠️ 可以使用传统工具的场景
+
+只在以下情况下使用 `Read`、`Grep`、`Glob`：
+- 读取配置文件（.yml, .properties, .json）
+- 读取文档（README.md, *.md）
+- 搜索日志消息或错误文本
+- 项目未在 LookGraph 中初始化
+
+### 标准工作流
+
+#### 1. 会话开始时
 ```bash
-# 1. 获取项目摘要
+# 检查项目是否已初始化
+python3 ~/.claude/hooks/lookgraph/project_list.py
+
+# 如果未初始化，先初始化
+python3 ~/.claude/hooks/lookgraph/project_init.py /path/to/project ProjectName
+
+# 获取项目概览
 python3 ~/.claude/hooks/lookgraph/project_summary.py <project_id>
-
-# 2. 如果有具体模块，查询模块的类
-python3 ~/.claude/hooks/lookgraph/module_classes.py <module_id>
 ```
 
-### 当用户问 "xxx 功能在哪里？"
-
+#### 2. 定位代码
 ```bash
-# 使用语义搜索
-python3 ~/.claude/hooks/lookgraph/semantic_search.py <project_id> "xxx功能" 5
+# 用语义搜索找到相关代码
+python3 ~/.claude/hooks/lookgraph/semantic_search.py <project_id> "功能描述" 10
+# 返回结果包含 entity_id (classId 或 methodId)
 ```
 
-### 当用户问 "修改这个方法会影响哪些地方？"
-
+#### 3. 理解代码
 ```bash
-# 影响分析
-python3 ~/.claude/hooks/lookgraph/impact_analysis.py METHOD <method_id>
-```
-
-### 当用户说 "帮我理解这个类"
-
-```bash
-# 1. 获取类上下文
+# 如果是类，获取类上下文
 python3 ~/.claude/hooks/lookgraph/class_context.py <class_id>
 
-# 2. 查看类关系
-python3 ~/.claude/hooks/lookgraph/class_relations.py <class_id>
+# 如果是方法，获取方法上下文
+python3 ~/.claude/hooks/lookgraph/method_context.py <method_id>
+```
+
+#### 4. 保存理解
+```bash
+# 当理解了业务含义后，创建注释
+python3 ~/.claude/hooks/lookgraph/semantic_annotate.py \
+  --project-id <project_id> \
+  --project-path /path/to/project \
+  --package com.example \
+  --class ClassName \
+  --type CLASS \
+  --content "业务含义描述" \
+  --source AI
+```
+
+### 行为示例
+
+**❌ 错误行为（不要这样做）**:
+```
+用户: "查找用户登录的代码"
+Claude: [使用 Grep 搜索 "login"]
+        [使用 Read 读取找到的文件]
+```
+
+**✅ 正确行为（应该这样做）**:
+```
+用户: "查找用户登录的代码"
+Claude: [使用 semantic_search.py "用户登录" 搜索]
+        [使用 class_context.py 获取类上下文]
+        [解释代码结构和业务逻辑]
+        [使用 semantic_annotate.py 保存理解]
 ```
 
 ---

@@ -11,6 +11,7 @@ import shutil
 from pathlib import Path
 
 HOOKS_DIR = Path.home() / ".claude" / "hooks" / "lookgraph"
+SKILLS_DIR = Path.home() / ".claude" / "skills"
 CLAUDE_MD = Path.home() / ".claude" / "CLAUDE.md"
 SETTINGS_FILE = Path.home() / ".claude" / "settings.json"
 
@@ -22,6 +23,55 @@ def remove_hooks_directory():
         return True
     else:
         print(f"⚠ Hooks directory not found: {HOOKS_DIR}")
+        return False
+
+def remove_skills():
+    """Remove LookGraph skill files from both global and project directories"""
+    # Get project root
+    project_root = Path(__file__).parent.parent
+    project_skills_dir = project_root / ".claude" / "skills"
+
+    removed = []
+
+    # Remove from global directory (~/.claude/skills/)
+    global_skills_dir = Path.home() / ".claude" / "skills"
+    global_skills = ["look_graph", "exit_look_graph"]
+    for skill_name in global_skills:
+        skill_dir = global_skills_dir / skill_name
+        if skill_dir.exists() and skill_dir.is_dir():
+            shutil.rmtree(skill_dir)
+            removed.append(f"global:{skill_name}")
+            print(f"✓ Removed global skill: {skill_name}")
+
+    # Remove from project directory (<project>/.claude/skills/)
+    for skill_name in global_skills:
+        skill_dir = project_skills_dir / skill_name
+        if skill_dir.exists() and skill_dir.is_dir():
+            shutil.rmtree(skill_dir)
+            removed.append(f"project:{skill_name}")
+            print(f"✓ Removed project skill: {skill_name}")
+
+    # Also remove legacy single-file skills (old format)
+    legacy_skills = ["look_graph.skill.md", "exit_look_graph.skill.md"]
+    for skill in legacy_skills:
+        # Check global
+        skill_path = global_skills_dir / skill
+        if skill_path.exists():
+            os.remove(skill_path)
+            removed.append(f"global-legacy:{skill}")
+            print(f"✓ Removed legacy global skill: {skill}")
+
+        # Check project
+        skill_path = project_skills_dir / skill
+        if skill_path.exists():
+            os.remove(skill_path)
+            removed.append(f"project-legacy:{skill}")
+            print(f"✓ Removed legacy project skill: {skill}")
+
+    if removed:
+        return True
+    else:
+        print(f"⚠ No LookGraph skills found")
         return False
 
 def remove_claude_md():
@@ -114,6 +164,8 @@ def main():
 
     print("This will remove:")
     print(f"  - {HOOKS_DIR}")
+    print(f"  - {SKILLS_DIR}/look_graph.skill.md")
+    print(f"  - {SKILLS_DIR}/exit_look_graph.skill.md")
     print(f"  - {CLAUDE_MD} (if contains LookGraph content)")
     print(f"  - LookGraph entries from {SETTINGS_FILE}")
     print()
@@ -130,13 +182,18 @@ def main():
     remove_hooks_directory()
     print()
 
-    # Step 2: Remove CLAUDE.md
-    print("Step 2: Removing CLAUDE.md...")
+    # Step 2: Remove skills
+    print("Step 2: Removing skills...")
+    remove_skills()
+    print()
+
+    # Step 3: Remove CLAUDE.md
+    print("Step 3: Removing CLAUDE.md...")
     remove_claude_md()
     print()
 
-    # Step 3: Clean up settings.json (remove old customCommands if exists)
-    print("Step 3: Cleaning settings.json...")
+    # Step 4: Clean up settings.json
+    print("Step 4: Cleaning settings.json...")
     update_settings()
     print()
 
