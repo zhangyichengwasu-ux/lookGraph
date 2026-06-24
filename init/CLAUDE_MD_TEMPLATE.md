@@ -80,6 +80,58 @@ python3 ~/.claude/hooks/lookgraph/method_context.py <method_id>
 python3 ~/.claude/hooks/lookgraph/project_update.py <project_id>
 ```
 
+### 场景 5: 提炼和存储业务语义 ⭐
+
+**当你理解了某个类或方法的业务含义时，应该主动将其存储到 LookGraph。**
+
+```bash
+# 1. 分析代码，理解业务逻辑
+python3 ~/.claude/hooks/lookgraph/class_context.py <class_id>
+
+# 2. 创建类注释
+python3 ~/.claude/hooks/lookgraph/semantic_annotate.py \
+  --project-id <project_id> \
+  --project-path /path/to/project \
+  --package com.example \
+  --class UserService \
+  --type CLASS \
+  --content "用户服务类，负责用户注册、登录、权限验证" \
+  --source AI \
+  --reason "代码分析自动生成"
+
+# 3. 创建方法注释
+python3 ~/.claude/hooks/lookgraph/semantic_annotate.py \
+  --project-id <project_id> \
+  --project-path /path/to/project \
+  --package com.example \
+  --class UserService \
+  --method login \
+  --type METHOD \
+  --content "用户登录方法，验证用户名密码，生成 JWT token" \
+  --source AI
+```
+
+**何时创建注释**:
+- ✅ 当你深入分析某个类/方法并理解其业务逻辑时
+- ✅ 当用户明确要求理解某段代码时
+- ✅ 当你发现重要的业务规则或约束时
+- ❌ 不要为琐碎的 getter/setter 创建注释
+- ❌ 不要为显而易见的工具类创建注释
+
+**修正注释**:
+当发现 AI 生成的注释不准确时：
+```bash
+python3 ~/.claude/hooks/lookgraph/semantic_annotate.py \
+  --project-id <project_id> \
+  --project-path /path/to/project \
+  --package com.example \
+  --class UserService \
+  --type CLASS \
+  --content "修正后的准确描述" \
+  --source HUMAN \
+  --reason "修正 AI 的理解偏差"
+```
+
 ---
 
 ## 可用命令详解
@@ -186,6 +238,79 @@ python3 ~/.claude/hooks/lookgraph/semantic_class_history.py com.example UserServ
 
 ```bash
 python3 ~/.claude/hooks/lookgraph/semantic_method_history.py <package_name> <class_name> <method_name>
+```
+
+#### semantic_annotate.py ⭐
+创建或更新业务语义注释
+
+```bash
+python3 ~/.claude/hooks/lookgraph/semantic_annotate.py \
+  --project-id <project_id> \
+  --project-path /path/to/project \
+  --package <package_name> \
+  --class <class_name> \
+  [--method <method_name>] \
+  --type CLASS|METHOD|FIELD|ENUM|INTERFACE \
+  --content "<业务描述>" \
+  --source AI|HUMAN \
+  [--reason "<创建原因>"]
+```
+
+**参数**:
+- `project-id`: 项目 ID（必填）
+- `project-path`: 项目路径，用于自动获取 git hash（推荐）
+- `package`: 包名（必填）
+- `class`: 类名（必填）
+- `method`: 方法名（注释方法时必填）
+- `type`: 注释类型（必填）
+- `content`: 业务语义描述（必填）
+- `source`: AI 或 HUMAN（必填）
+- `reason`: 创建/修改原因（可选）
+
+**自动功能**:
+- 自动获取 git commit hash
+- 自动触发向量索引更新
+- 自动保存注释历史
+
+**何时使用**:
+- ✅ 分析代码后理解了业务逻辑
+- ✅ 发现重要的业务规则
+- ✅ 修正不准确的 AI 注释
+- ❌ 不要为显而易见的代码创建注释
+
+**示例**:
+```bash
+# 创建类注释
+python3 ~/.claude/hooks/lookgraph/semantic_annotate.py \
+  --project-id proj123 \
+  --project-path /path/to/project \
+  --package com.example.service \
+  --class OrderService \
+  --type CLASS \
+  --content "订单服务，处理下单、支付、发货、退款等完整流程" \
+  --source AI
+
+# 创建方法注释
+python3 ~/.claude/hooks/lookgraph/semantic_annotate.py \
+  --project-id proj123 \
+  --project-path /path/to/project \
+  --package com.example.service \
+  --class OrderService \
+  --method refund \
+  --type METHOD \
+  --content "订单退款，校验条件，调用支付网关，更新状态，触发库存回滚" \
+  --source AI
+
+# 人工修正
+python3 ~/.claude/hooks/lookgraph/semantic_annotate.py \
+  --project-id proj123 \
+  --project-path /path/to/project \
+  --package com.example.service \
+  --class OrderService \
+  --type CLASS \
+  --content "更准确的业务描述" \
+  --source HUMAN \
+  --reason "修正 AI 理解偏差"
 ```
 
 ---

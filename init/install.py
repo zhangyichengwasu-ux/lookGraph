@@ -129,6 +129,13 @@ HOOKS = [
         "description": "Get impact analysis for code changes",
         "usage": "lookgraph:impact-analysis <entity_type> <entity_id>",
         "command": "python3 ~/.claude/hooks/lookgraph/impact_analysis.py"
+    },
+    {
+        "name": "lookgraph:semantic-annotate",
+        "file": "semantic_annotate.py",
+        "description": "Create or update semantic annotations",
+        "usage": "lookgraph:semantic-annotate --project-id ID --package PKG --class CLASS --type TYPE --content CONTENT --source AI|HUMAN",
+        "command": "python3 ~/.claude/hooks/lookgraph/semantic_annotate.py"
     }
 ]
 
