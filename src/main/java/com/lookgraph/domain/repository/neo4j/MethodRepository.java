@@ -1,4 +1,4 @@
-package com.lookgraph.domain.repository;
+package com.lookgraph.domain.repository.neo4j;
 
 import com.lookgraph.domain.node.MethodNode;
 import org.springframework.data.neo4j.repository.Neo4jRepository;
@@ -14,7 +14,7 @@ public interface MethodRepository extends Neo4jRepository<MethodNode, String> {
     List<MethodNode> findByClassId(String classId);
 
     @Query("MATCH (m:Method {projectId: $projectId}) RETURN count(m)")
-    long countByProjectId(@Param("projectId") String projectId);
+    Long countByProjectId(@Param("projectId") String projectId);
 
     @Query("MATCH (m:Method) WHERE m.filePath = $filePath DETACH DELETE m")
     void deleteAllByFilePath(@Param("filePath") String filePath);

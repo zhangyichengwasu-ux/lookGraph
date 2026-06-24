@@ -2,8 +2,8 @@ package com.lookgraph.scanner;
 
 import com.lookgraph.common.enums.Language;
 import com.lookgraph.domain.node.ClassNode;
-import com.lookgraph.domain.repository.ClassRepository;
-import com.lookgraph.domain.repository.MethodRepository;
+import com.lookgraph.domain.repository.neo4j.ClassRepository;
+import com.lookgraph.domain.repository.neo4j.MethodRepository;
 import com.lookgraph.parser.CodeParser;
 import com.lookgraph.parser.ParseResult;
 import com.lookgraph.vector.VectorIndexService;

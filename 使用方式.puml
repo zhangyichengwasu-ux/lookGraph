@@ -1,0 +1,24 @@
+@startuml
+'https://plantuml.com/activity-diagram-beta
+
+start
+:claude接收用户输入的关键词、文件定位、代码定位;
+:开始为claude定位业务场景的入口并加载全业务场景相关代码片段(类、方法、变量、构造器);
+if (是否提供了代码片段) is (true) then
+:获取当前文件的md5;
+:根据当前代码片段所在文件的md5、包名、文件名去neo4j定位文件
+    if(md5一致) is (true) then
+        :不断调用API搜索neo4j,分别向上下游方向搜索,沿途搜集涉及到的代码片段按顺序到当前上下文中
+
+    else
+'        :结束
+    endif
+    :拼凑完整的调用链
+':不断调用API搜索neo4j,分别向上下游方向搜索,沿途搜集涉及到的代码片段加载到当前上下文中
+else
+:关键词检索rag向量库;
+endif
+
+stop
+
+@enduml

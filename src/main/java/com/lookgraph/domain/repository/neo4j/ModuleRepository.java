@@ -1,4 +1,4 @@
-package com.lookgraph.domain.repository;
+package com.lookgraph.domain.repository.neo4j;
 
 import com.lookgraph.domain.node.ModuleNode;
 import org.springframework.data.neo4j.repository.Neo4jRepository;
@@ -17,7 +17,7 @@ public interface ModuleRepository extends Neo4jRepository<ModuleNode, String> {
     List<String> findModuleNamesByProjectId(@Param("projectId") String projectId);
 
     @Query("MATCH (m:Module {projectId: $projectId}) RETURN count(m)")
-    long countByProjectId(@Param("projectId") String projectId);
+    Long countByProjectId(@Param("projectId") String projectId);
 
     @Query("MATCH (m:Module {projectId: $projectId})-[:DEPENDS_ON]->(dep:Module) RETURN m, dep")
     List<ModuleNode> findModulesWithDependencies(@Param("projectId") String projectId);

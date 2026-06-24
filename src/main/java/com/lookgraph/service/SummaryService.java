@@ -1,10 +1,10 @@
 package com.lookgraph.service;
 
 import com.lookgraph.domain.node.ProjectNode;
-import com.lookgraph.domain.repository.ClassRepository;
-import com.lookgraph.domain.repository.MethodRepository;
-import com.lookgraph.domain.repository.ModuleRepository;
-import com.lookgraph.domain.repository.ProjectRepository;
+import com.lookgraph.domain.repository.neo4j.ClassRepository;
+import com.lookgraph.domain.repository.neo4j.MethodRepository;
+import com.lookgraph.domain.repository.neo4j.ModuleRepository;
+import com.lookgraph.domain.repository.neo4j.ProjectRepository;
 import com.lookgraph.dto.response.ProjectSummary;
 import com.lookgraph.vector.VectorIndexService;
 import lombok.RequiredArgsConstructor;

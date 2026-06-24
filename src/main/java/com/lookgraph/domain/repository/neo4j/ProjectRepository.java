@@ -1,4 +1,4 @@
-package com.lookgraph.domain.repository;
+package com.lookgraph.domain.repository.neo4j;
 
 import com.lookgraph.domain.node.ProjectNode;
 import org.springframework.data.neo4j.repository.Neo4jRepository;

@@ -1,7 +1,7 @@
 package com.lookgraph.service;
 
-import com.lookgraph.domain.repository.ClassRepository;
-import com.lookgraph.domain.repository.MethodRepository;
+import com.lookgraph.domain.repository.neo4j.ClassRepository;
+import com.lookgraph.domain.repository.neo4j.MethodRepository;
 import com.lookgraph.dto.request.SemanticSearchRequest;
 import com.lookgraph.dto.response.SemanticHit;
 import com.lookgraph.vector.VectorDocument;

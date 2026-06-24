@@ -93,6 +93,77 @@ curl -X POST http://localhost:8090/api/semantic/search \
 
 ---
 
+### 业务语义注释管理
+
+#### 创建/更新业务注释
+```bash
+curl -X POST http://localhost:8090/api/semantic \
+  -H "Content-Type: application/json" \
+  -d '{
+    "packageName": "com.example",
+    "className": "UserService",
+    "methodName": "login",
+    "type": "METHOD",
+    "neo4jNodeId": "method-uuid-123",
+    "content": "用户登录方法，验证用户名密码",
+    "gitCommitHash": "abc123def456",
+    "modifiedBy": "AI",
+    "modifyReason": "根据方法签名和实现自动生成"
+  }'
+```
+
+**字段说明**：
+- `packageName`（必填）：包名
+- `className`（必填）：类名
+- `methodName`（可选）：方法名（注释类时不填）
+- `fieldName`（可选）：字段名（注释字段时填写）
+- `type`（必填）：注释类型，可选值：`CLASS`、`ENUM`、`INTERFACE`、`ABSTRACT_CLASS`、`METHOD`、`FIELD`
+- `neo4jNodeId`（可选）：Neo4j 节点 ID，用于关联图谱节点
+- `content`（可选）：业务注释内容
+- `gitCommitHash`（必填）：当前代码的 Git commit hash
+- `modifiedBy`（必填）：修改来源，可选值：`AI`、`HUMAN`
+- `modifyReason`（可选）：修改原因说明
+
+#### 查询类的注释历史
+```bash
+curl "http://localhost:8090/api/semantic/class?packageName=com.example&className=UserService"
+```
+
+**返回示例**：
+```json
+{
+  "entityId": "com.example.UserService",
+  "entityType": "CLASS",
+  "current": {
+    "historyId": "3",
+    "content": "用户服务类，处理用户注册、登录、信息管理",
+    "modifiedBy": "HUMAN",
+    "modifyReason": "补充完整业务说明",
+    "createTime": "2026-06-23T15:00:00"
+  },
+  "history": [...]
+}
+```
+
+#### 查询方法的注释历史
+```bash
+curl "http://localhost:8090/api/semantic/method?packageName=com.example&className=UserService&methodName=login"
+```
+
+#### 根据 Git Hash 查询所有注释
+```bash
+curl http://localhost:8090/api/semantic/git/{gitCommitHash}
+```
+用于查找某个 Git 版本的所有业务注释及变动原因。
+
+#### 根据 Neo4j 节点 ID 查询注释历史
+```bash
+curl http://localhost:8090/api/semantic/node/{neo4jNodeId}
+```
+查询某个 Neo4j 节点的所有历史注释版本。
+
+---
+
 ### 上下文获取（最小代码切片）
 
 获取方法的精简上下文（源码 + 上下游调用 + 注释）：
@@ -143,6 +214,22 @@ curl http://localhost:8090/api/context/class/{classId}
 POST /api/project/update?projectId={id}   → 触发增量扫描，更新图谱
 ```
 
+### 场景 5：管理业务语义注释
+```
+# AI 生成注释
+1. 分析代码上下文，理解业务逻辑
+2. POST /api/semantic  → 创建 AI 生成的注释（modifiedBy="AI"）
+
+# 查看注释历史
+3. GET /api/semantic/class?packageName=...&className=...  → 查看类的注释演进历史
+
+# 人工纠正注释
+4. POST /api/semantic  → 创建人工修正版本（modifiedBy="HUMAN"）
+
+# 版本追溯
+5. GET /api/semantic/git/{hash}  → 查看某个版本的所有注释
+```
+
 ---
 
 ## 注意事项
@@ -152,3 +239,8 @@ POST /api/project/update?projectId={id}   → 触发增量扫描，更新图谱
 3. **Embedding API 未配置时**：向量索引跳过，仅图谱功能可用。
 4. **增量更新**：代码变更后调用 `/api/project/update` 保持图谱最新。
 5. **Swagger UI**：`http://localhost:8090/swagger-ui.html` 可交互式测试所有接口。
+6. **业务注释管理**：
+   - 注释历史无限保留，每次修改都会创建新版本
+   - `gitCommitHash` 必填，用于关联代码版本
+   - AI 和人工修正的注释通过 `modifiedBy` 字段区分
+   - 可通过 Git hash 快速定位某个版本的所有业务理解
