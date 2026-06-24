@@ -21,23 +21,15 @@ public interface ClassRepository extends Neo4jRepository<ClassNode, String> {
     @Query("MATCH (c:Class {filePath: $filePath}) DETACH DELETE c")
     void deleteAllByFilePath(@Param("filePath") String filePath);
 
-    @Query("""
-            MATCH (c:Class {classId: $classId})
-            OPTIONAL MATCH (c)-[:EXTENDS]->(parent:Class)
-            OPTIONAL MATCH (c)-[:IMPLEMENTS]->(iface:Class)
-            OPTIONAL MATCH (c)-[:DEPENDS_ON]->(dep:Class)
-            OPTIONAL MATCH (c)<-[:DEPENDS_ON]-(depBy:Class)
-            RETURN c, parent, collect(DISTINCT iface) AS interfaces,
-                   collect(DISTINCT dep) AS dependencies,
-                   collect(DISTINCT depBy) AS dependedBy
-            """)
-    ClassRelationProjection findClassRelations(@Param("classId") String classId);
+    @Query("MATCH (c:Class {classId: $classId})-[:EXTENDS]->(parent:Class) RETURN parent")
+    ClassNode findParent(@Param("classId") String classId);
 
-    interface ClassRelationProjection {
-        ClassNode getC();
-        ClassNode getParent();
-        List<ClassNode> getInterfaces();
-        List<ClassNode> getDependencies();
-        List<ClassNode> getDependedBy();
-    }
+    @Query("MATCH (c:Class {classId: $classId})-[:IMPLEMENTS]->(iface:Class) RETURN iface")
+    List<ClassNode> findInterfaces(@Param("classId") String classId);
+
+    @Query("MATCH (c:Class {classId: $classId})-[:DEPENDS_ON]->(dep:Class) RETURN dep")
+    List<ClassNode> findDependencies(@Param("classId") String classId);
+
+    @Query("MATCH (c:Class {classId: $classId})<-[:DEPENDS_ON]-(depBy:Class) RETURN depBy")
+    List<ClassNode> findDependedBy(@Param("classId") String classId);
 }

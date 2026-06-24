@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -23,17 +24,13 @@ public class StructureQueryService {
         ClassNode node = classRepository.findById(classId)
                 .orElseThrow(() -> new BizException("类不存在: " + classId));
 
-        var projection = classRepository.findClassRelations(classId);
-        if (projection == null) {
-            return ClassRelationView.empty(node);
-        }
+        // 直接查询关联节点
+        ClassNode parent = classRepository.findParent(classId);
+        List<ClassNode> interfaces = classRepository.findInterfaces(classId);
+        List<ClassNode> dependencies = classRepository.findDependencies(classId);
+        List<ClassNode> dependedBy = classRepository.findDependedBy(classId);
 
-        return new ClassRelationView(
-                projection.getC(),
-                projection.getParent(),
-                projection.getInterfaces(),
-                projection.getDependencies(),
-                projection.getDependedBy());
+        return new ClassRelationView(node, parent, interfaces, dependencies, dependedBy);
     }
 
     public CallChainView callChain(String methodId) {

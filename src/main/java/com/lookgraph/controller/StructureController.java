@@ -28,7 +28,7 @@ public class StructureController {
         return Result.ok(structureService.classRelations(classId));
     }
 
-    @GetMapping("/method/{methodId}/callchain")
+    @GetMapping("/method/{methodId:.+}/callchain")
     @Operation(summary = "查询方法调用链路")
     public Result<CallChainView> callChain(@PathVariable String methodId) {
         return Result.ok(structureService.callChain(methodId));
@@ -46,7 +46,7 @@ public class StructureController {
         return Result.ok(structureService.methodsInClass(classId));
     }
 
-    @GetMapping("/impact/{entityType}/{entityId}")
+    @GetMapping("/impact/{entityType}/{entityId:.+}")
     @Operation(summary = "查询代码修改影响范围")
     public Result<ImpactReport> impact(@PathVariable EntityType entityType,
                                        @PathVariable String entityId) {

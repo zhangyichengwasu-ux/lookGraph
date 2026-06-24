@@ -17,7 +17,7 @@ public class ContextController {
 
     private final ContextAssemblyService contextService;
 
-    @GetMapping("/method/{methodId}")
+    @GetMapping("/method/{methodId:.+}")
     @Operation(summary = "获取方法精简上下文")
     public Result<MethodContext> methodContext(@PathVariable String methodId) {
         return Result.ok(contextService.methodContext(methodId));

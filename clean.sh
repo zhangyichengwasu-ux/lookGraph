@@ -67,27 +67,70 @@ clean_neo4j() {
     echo -e "${YELLOW}[Neo4j] 开始清理...${NC}"
     TOTAL_COUNT=$((TOTAL_COUNT + 1))
 
-    # 检查 cypher-shell 是否可用
-    if ! command -v cypher-shell &> /dev/null; then
-        echo -e "  ${YELLOW}⚠️  cypher-shell 未安装，跳过 Neo4j 清理${NC}"
-        echo "  提示: 安装 Neo4j Desktop 或命令行工具"
+    # 从 bolt URI 转换为 HTTP URL
+    NEO4J_HTTP_URL="${NEO4J_URI/bolt:\/\//http://}"
+    NEO4J_HTTP_URL="${NEO4J_HTTP_URL/:7687/:7474}"
+
+    # 使用 HTTP API 执行 Cypher 查询
+    neo4j_query() {
+        local query="$1"
+        curl -s -u "${NEO4J_USER}:${NEO4J_PASSWORD}" \
+            -X POST "${NEO4J_HTTP_URL}/db/neo4j/tx/commit" \
+            -H "Content-Type: application/json" \
+            -d "{\"statements\":[{\"statement\":\"${query}\"}]}"
+    }
+
+    # 测试连接
+    TEST_RESULT=$(neo4j_query "RETURN 1")
+    if echo "$TEST_RESULT" | grep -q '"errors":\[\]'; then
+        :
+    else
+        echo -e "  ${RED}✗ 无法连接到 Neo4j${NC}"
+        echo "  请检查连接配置: ${NEO4J_HTTP_URL}"
         return 1
     fi
 
     # 统计节点数量
-    NODE_COUNT=$(cypher-shell -a "$NEO4J_URI" -u "$NEO4J_USER" -p "$NEO4J_PASSWORD" \
-        "MATCH (n) RETURN count(n) as count" --format plain 2>/dev/null | tail -1 | awk '{print $1}')
+    NODE_RESULT=$(neo4j_query "MATCH (n) RETURN count(n) as count")
+    NODE_COUNT=$(echo "$NODE_RESULT" | grep -o '"row":\[[0-9]*\]' | grep -o '[0-9]*' | head -1)
+    NODE_COUNT=${NODE_COUNT:-0}
 
     # 统计关系数量
-    REL_COUNT=$(cypher-shell -a "$NEO4J_URI" -u "$NEO4J_USER" -p "$NEO4J_PASSWORD" \
-        "MATCH ()-[r]->() RETURN count(r) as count" --format plain 2>/dev/null | tail -1 | awk '{print $1}')
+    REL_RESULT=$(neo4j_query "MATCH ()-[r]->() RETURN count(r) as count")
+    REL_COUNT=$(echo "$REL_RESULT" | grep -o '"row":\[[0-9]*\]' | grep -o '[0-9]*' | head -1)
+    REL_COUNT=${REL_COUNT:-0}
 
     echo "  发现 ${NODE_COUNT} 个节点, ${REL_COUNT} 个关系"
 
-    if [ "$NODE_COUNT" -gt 0 ] || [ "$REL_COUNT" -gt 0 ]; then
-        # 删除所有节点和关系
-        cypher-shell -a "$NEO4J_URI" -u "$NEO4J_USER" -p "$NEO4J_PASSWORD" \
-            "MATCH (n) DETACH DELETE n" &>/dev/null
+    if [ "$NODE_COUNT" -gt 0 ] 2>/dev/null || [ "$REL_COUNT" -gt 0 ] 2>/dev/null; then
+        # 批量删除所有节点和关系，避免超时
+        echo "  开始批量删除..."
+        BATCH_SIZE=1000
+        ITERATION=0
+
+        while true; do
+            # 检查剩余节点数
+            REMAINING_RESULT=$(neo4j_query "MATCH (n) RETURN count(n) as count")
+            REMAINING=$(echo "$REMAINING_RESULT" | grep -o '"row":\[[0-9]*\]' | grep -o '[0-9]*' | head -1)
+            REMAINING=${REMAINING:-0}
+
+            if [ "$REMAINING" -eq 0 ] 2>/dev/null; then
+                break
+            fi
+
+            # 批量删除节点
+            neo4j_query "MATCH (n) WITH n LIMIT ${BATCH_SIZE} DETACH DELETE n" >/dev/null
+
+            ITERATION=$((ITERATION + 1))
+            echo -e "  ${YELLOW}第 ${ITERATION} 批: 剩余 ~${REMAINING} 个节点...${NC}"
+
+            # 避免无限循环
+            if [ $ITERATION -gt 1000 ]; then
+                echo -e "  ${RED}⚠️  删除迭代次数过多，可能存在问题${NC}"
+                break
+            fi
+        done
+
         echo -e "  ${GREEN}✓ 已删除所有节点和关系${NC}"
     else
         echo -e "  ${GREEN}✓ 数据库已经是空的${NC}"

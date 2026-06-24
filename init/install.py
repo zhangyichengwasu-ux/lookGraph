@@ -13,6 +13,8 @@ from pathlib import Path
 HOOKS_DIR = Path.home() / ".claude" / "hooks" / "lookgraph"
 SETTINGS_FILE = Path.home() / ".claude" / "settings.json"
 SCRIPT_DIR = Path(__file__).parent.resolve()
+# Hook scripts are in the sibling 'hook' directory
+HOOK_SOURCE_DIR = SCRIPT_DIR.parent / "hook"
 
 # Define all hooks with their metadata
 HOOKS = [
@@ -140,7 +142,7 @@ def copy_hook_scripts():
     copied = []
 
     # Copy the client library
-    client_file = SCRIPT_DIR / "lookgraph_client.py"
+    client_file = HOOK_SOURCE_DIR / "lookgraph_client.py"
     if client_file.exists():
         shutil.copy2(client_file, HOOKS_DIR / "lookgraph_client.py")
         print(f"✓ Copied: lookgraph_client.py")
@@ -150,7 +152,7 @@ def copy_hook_scripts():
 
     # Copy all hook scripts
     for hook in HOOKS:
-        src = SCRIPT_DIR / hook["file"]
+        src = HOOK_SOURCE_DIR / hook["file"]
         dst = HOOKS_DIR / hook["file"]
 
         if src.exists():
@@ -182,37 +184,50 @@ def save_settings(settings):
     print(f"✓ Updated settings: {SETTINGS_FILE}")
 
 def register_hooks():
-    """Register hooks in settings.json"""
-    settings = load_settings()
+    """Create CLAUDE.md to make Claude aware of LookGraph tools"""
+    claude_md_path = Path.home() / ".claude" / "CLAUDE.md"
+    template_path = Path(__file__).parent / "CLAUDE_MD_TEMPLATE.md"
 
-    # Initialize hooks section if it doesn't exist
-    if "hooks" not in settings:
-        settings["hooks"] = {}
+    # Read the template file
+    if template_path.exists():
+        with open(template_path, 'r') as f:
+            claude_md_content = f.read()
+    else:
+        # Fallback to simple version if template not found
+        claude_md_content = """# LookGraph 代码分析工具
 
-    # Add LookGraph hooks
-    # Note: In Claude Code, hooks are typically event-based (e.g., pre-commit, post-read)
-    # For custom commands that can be invoked manually, we use a custom namespace
+## 简介
 
-    # Since Claude Code doesn't have a native way to register custom commands,
-    # we'll document them in a custom section for reference
-    if "customCommands" not in settings:
-        settings["customCommands"] = {}
+LookGraph 是一个代码分析和语义搜索系统，Hook 脚本已安装在 `~/.claude/hooks/lookgraph/`。
 
-    settings["customCommands"]["lookgraph"] = {
-        "description": "LookGraph code analysis and semantic search tools",
-        "baseUrl": "http://localhost:8080",
-        "commands": []
-    }
+## 快速开始
 
-    for hook in HOOKS:
-        settings["customCommands"]["lookgraph"]["commands"].append({
-            "name": hook["name"],
-            "description": hook["description"],
-            "usage": hook["usage"],
-            "command": hook["command"]
-        })
+```bash
+# 初始化项目
+python3 ~/.claude/hooks/lookgraph/project_init.py /path/to/project ProjectName
 
-    save_settings(settings)
+# 列出所有项目
+python3 ~/.claude/hooks/lookgraph/project_list.py
+
+# 获取项目摘要
+python3 ~/.claude/hooks/lookgraph/project_summary.py <project_id>
+
+# 语义搜索
+python3 ~/.claude/hooks/lookgraph/semantic_search.py <project_id> "查询内容" 5
+```
+
+## 配置
+
+- **API 地址**: http://localhost:8090 (默认)
+- **环境变量**: 可设置 `LOOKGRAPH_BASE_URL` 覆盖默认地址
+
+详细文档见 `~/.claude/hooks/lookgraph/README.md`
+"""
+
+    with open(claude_md_path, 'w') as f:
+        f.write(claude_md_content)
+
+    print(f"✓ Created CLAUDE.md: {claude_md_path}")
     return True
 
 def generate_readme():
@@ -278,9 +293,9 @@ def main():
     print()
 
     # Step 3: Register hooks
-    print("Step 3: Registering hooks in settings.json...")
+    print("Step 3: Creating CLAUDE.md documentation...")
     if not register_hooks():
-        print("\n✗ Installation failed: Could not register hooks")
+        print("\n✗ Installation failed: Could not create CLAUDE.md")
         sys.exit(1)
     print()
 
@@ -294,15 +309,16 @@ def main():
     print("=" * 60)
     print()
     print("Hooks installed to:", HOOKS_DIR)
-    print("Settings updated:", SETTINGS_FILE)
+    print("Documentation created:", Path.home() / ".claude" / "CLAUDE.md")
     print()
-    print("You can now use LookGraph hooks in Claude Code.")
+    print("✓ Claude can now recognize and use LookGraph tools!")
     print()
     print("Example usage:")
-    print("  python3 ~/.claude/hooks/lookgraph/project_list.py")
+    print("  Ask Claude: 'Use lookgraph to list all projects'")
+    print("  Ask Claude: 'Initialize this project with lookgraph'")
     print()
-    print("Note: Make sure the LookGraph server is running at http://localhost:8080")
-    print("      and you have the 'requests' library installed: pip install requests")
+    print("Note: Make sure the LookGraph server is running at http://localhost:8090")
+    print("      Start it with: cd /path/to/lookGraph && bash run.sh &")
 
 if __name__ == "__main__":
     main()

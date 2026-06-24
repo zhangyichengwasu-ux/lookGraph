@@ -47,9 +47,19 @@ lookgraph:
       - "**/.idea/**"
 
 logging:
+  file:
+    name: logs/lookgraph.log
+  pattern:
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
   level:
     com.lookgraph: INFO
     org.springframework.data.neo4j: WARN
+  logback:
+    rollingpolicy:
+      max-file-size: 10MB
+      max-history: 30
+      total-size-cap: 1GB
 
 management:
   endpoints:
