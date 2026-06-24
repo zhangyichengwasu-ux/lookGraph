@@ -6,7 +6,14 @@ LookGraph 语义注释工具
 import argparse
 import sys
 import subprocess
+import os
+from pathlib import Path
+
+# 确保脚本目录在模块搜索路径中
+sys.path.insert(0, str(Path(__file__).parent))
+
 from lookgraph_client import get_client
+from file_hash import hash_file_compressed
 
 def get_git_hash(project_path):
     """自动获取当前 git commit hash"""
@@ -20,6 +27,23 @@ def get_git_hash(project_path):
         )
         return result.stdout.strip()
     except:
+        return None
+
+def get_file_hash_by_class(project_id, package, class_name):
+    """通过 LookGraph 查询类的源文件路径，并计算文件 hash"""
+    try:
+        client = get_client()
+        class_id = f"{package}.{class_name}"
+        # 通过 class_context 获取 classNode 信息（含 filePath）
+        data = client.get(f"/api/context/class/{class_id}")
+        if not data:
+            return None
+        file_path = data.get("filePath") or (data.get("classNode") or {}).get("filePath")
+        if not file_path or not os.path.exists(file_path):
+            return None
+        return hash_file_compressed(file_path)
+    except Exception as e:
+        print(f"  ⚠ 查询文件路径失败: {e}", file=sys.stderr)
         return None
 
 def main():
@@ -59,12 +83,12 @@ def main():
     parser.add_argument('--field', help='字段名（注释字段时必填）')
     parser.add_argument('--reason', help='创建/修改原因')
     parser.add_argument('--node-id', help='Neo4j 节点 ID（如果已知）')
-    parser.add_argument('--git-hash', help='Git commit hash（不提供则自动获取）')
+    parser.add_argument('--git-hash', help='Git commit hash（不提供则自动获取/通过文件 hash 计算）')
     parser.add_argument('--project-path', help='项目路径（用于自动获取 git hash）')
 
     args = parser.parse_args()
 
-    # 获取 git hash
+    # 获取代码 hash：优先级 --git-hash > git hash > 文件内容 hash
     git_hash = args.git_hash
     if not git_hash and args.project_path:
         git_hash = get_git_hash(args.project_path)
@@ -72,8 +96,16 @@ def main():
             print(f"自动获取 git hash: {git_hash[:8]}...")
 
     if not git_hash:
-        print("错误: 需要提供 --git-hash 或 --project-path", file=sys.stderr)
-        print("提示: 使用 'git rev-parse HEAD' 获取当前 commit hash", file=sys.stderr)
+        # 回退到通过类源文件计算 hash
+        print("git hash 不可用，尝试通过类源文件计算 hash...")
+        git_hash = get_file_hash_by_class(args.project_id, args.package, args.class_name)
+        if git_hash:
+            print(f"使用文件内容 hash: {git_hash[:8]}...")
+
+    if not git_hash:
+        print("错误: 无法获取代码 hash", file=sys.stderr)
+        print("  - 不是 git 仓库且未通过 LookGraph 找到源文件", file=sys.stderr)
+        print("  - 请提供 --git-hash 或确保项目已在 LookGraph 中初始化", file=sys.stderr)
         sys.exit(1)
 
     # 构造请求体
@@ -115,7 +147,7 @@ def main():
             print(f"  原因: {args.reason}")
 
         # 触发精确的向量更新（只更新这一条）
-        history_id = result.get("data", {}).get("historyId")
+        history_id = result.get("historyId") if isinstance(result, dict) else None
         if history_id:
             print("\n正在更新向量索引...")
             client.post(f"/api/semantic/{history_id}/index", params={"projectId": args.project_id})

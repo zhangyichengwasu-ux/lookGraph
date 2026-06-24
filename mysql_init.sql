@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS semantic_history (
     content TEXT COMMENT '业务注释内容',
 
     -- 版本追溯
-    git_commit_hash VARCHAR(40) NOT NULL COMMENT 'Git 提交哈希，用于版本追溯',
+    git_commit_hash VARCHAR(64) NOT NULL COMMENT 'Git 提交哈希或文件内容哈希，用于版本追溯',
 
     -- 修改元信息
     modified_by VARCHAR(20) NOT NULL COMMENT '修改来源: AI, HUMAN',

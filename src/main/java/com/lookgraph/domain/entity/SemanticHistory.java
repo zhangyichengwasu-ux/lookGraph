@@ -39,7 +39,7 @@ public class SemanticHistory {
     @Column(columnDefinition = "TEXT")
     private String content;
 
-    @Column(nullable = false, length = 40)
+    @Column(nullable = false, length = 64)
     private String gitCommitHash;
 
     @Enumerated(EnumType.STRING)

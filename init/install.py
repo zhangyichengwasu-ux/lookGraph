@@ -165,6 +165,17 @@ def copy_hook_scripts():
         print(f"✗ Missing: lookgraph_client.py", file=sys.stderr)
         return False
 
+    # Copy shared utility libraries
+    for lib_file in ["file_hash.py"]:
+        src = HOOK_SOURCE_DIR / lib_file
+        if src.exists():
+            shutil.copy2(src, HOOKS_DIR / lib_file)
+            os.chmod(HOOKS_DIR / lib_file, 0o755)
+            print(f"✓ Copied: {lib_file}")
+        else:
+            print(f"✗ Missing: {lib_file}", file=sys.stderr)
+            return False
+
     # Copy all hook scripts
     for hook in HOOKS:
         src = HOOK_SOURCE_DIR / hook["file"]
