@@ -15,7 +15,7 @@ def main():
     method_id = sys.argv[1]
 
     client = get_client()
-    response = client.get(f"/api/context/method/{method_id}")
+    response = client.post("/api/context/method", data={"methodId": method_id})
     print(client.format_output(response))
 
 if __name__ == "__main__":

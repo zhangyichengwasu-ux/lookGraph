@@ -18,7 +18,10 @@ def main():
     entity_id = sys.argv[2]
 
     client = get_client()
-    response = client.get(f"/api/structure/impact/{entity_type}/{entity_id}")
+    response = client.post("/api/structure/impact", data={
+        "entityType": entity_type,
+        "entityId": entity_id
+    })
     print(client.format_output(response))
 
 if __name__ == "__main__":

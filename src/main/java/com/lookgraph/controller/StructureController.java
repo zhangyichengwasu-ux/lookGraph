@@ -3,6 +3,8 @@ package com.lookgraph.controller;
 import com.lookgraph.common.enums.EntityType;
 import com.lookgraph.domain.node.ClassNode;
 import com.lookgraph.domain.node.MethodNode;
+import com.lookgraph.dto.request.ImpactRequest;
+import com.lookgraph.dto.request.MethodIdRequest;
 import com.lookgraph.dto.response.*;
 import com.lookgraph.service.ImpactAnalysisService;
 import com.lookgraph.service.StructureQueryService;
@@ -28,9 +30,16 @@ public class StructureController {
         return Result.ok(structureService.classRelations(classId));
     }
 
-    @GetMapping("/method/{methodId:.+}/callchain")
+    @PostMapping("/method/callchain")
     @Operation(summary = "查询方法调用链路")
-    public Result<CallChainView> callChain(@PathVariable String methodId) {
+    public Result<CallChainView> callChain(@RequestBody MethodIdRequest request) {
+        return Result.ok(structureService.callChain(request.methodId()));
+    }
+
+    @GetMapping("/method/{methodId:.+}/callchain")
+    @Operation(summary = "查询方法调用链路 (已废弃，使用 POST 版本)")
+    @Deprecated
+    public Result<CallChainView> callChainDeprecated(@PathVariable String methodId) {
         return Result.ok(structureService.callChain(methodId));
     }
 
@@ -46,9 +55,16 @@ public class StructureController {
         return Result.ok(structureService.methodsInClass(classId));
     }
 
-    @GetMapping("/impact/{entityType}/{entityId:.+}")
+    @PostMapping("/impact")
     @Operation(summary = "查询代码修改影响范围")
-    public Result<ImpactReport> impact(@PathVariable EntityType entityType,
+    public Result<ImpactReport> impact(@RequestBody ImpactRequest request) {
+        return Result.ok(impactService.analyze(request.entityType(), request.entityId()));
+    }
+
+    @GetMapping("/impact/{entityType}/{entityId:.+}")
+    @Operation(summary = "查询代码修改影响范围 (已废弃，使用 POST 版本)")
+    @Deprecated
+    public Result<ImpactReport> impactDeprecated(@PathVariable EntityType entityType,
                                        @PathVariable String entityId) {
         return Result.ok(impactService.analyze(entityType, entityId));
     }

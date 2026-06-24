@@ -15,7 +15,7 @@ def main():
     method_id = sys.argv[1]
 
     client = get_client()
-    response = client.get(f"/api/structure/method/{method_id}/callchain")
+    response = client.post("/api/structure/method/callchain", data={"methodId": method_id})
     print(client.format_output(response))
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 package com.lookgraph.controller;
 
+import com.lookgraph.dto.request.MethodIdRequest;
 import com.lookgraph.dto.response.ClassContext;
 import com.lookgraph.dto.response.MethodContext;
 import com.lookgraph.dto.response.Result;
@@ -17,9 +18,16 @@ public class ContextController {
 
     private final ContextAssemblyService contextService;
 
-    @GetMapping("/method/{methodId:.+}")
+    @PostMapping("/method")
     @Operation(summary = "获取方法精简上下文")
-    public Result<MethodContext> methodContext(@PathVariable String methodId) {
+    public Result<MethodContext> methodContext(@RequestBody MethodIdRequest request) {
+        return Result.ok(contextService.methodContext(request.methodId()));
+    }
+
+    @GetMapping("/method/{methodId:.+}")
+    @Operation(summary = "获取方法精简上下文 (已废弃，使用 POST 版本)")
+    @Deprecated
+    public Result<MethodContext> methodContextDeprecated(@PathVariable String methodId) {
         return Result.ok(contextService.methodContext(methodId));
     }
 
