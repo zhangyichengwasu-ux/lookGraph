@@ -34,35 +34,31 @@ public class VectorIndexService {
         List<Map<String, Object>> metas = new ArrayList<>();
 
         result.classes().forEach(c -> {
-            if (StringUtils.hasText(c.getComment())) {
-                ids.add(c.getClassId());
-                docs.add(c.getComment());
-                Map<String, Object> meta = new HashMap<>();
-                meta.put("entity_id", c.getClassId());
-                meta.put("entity_type", "class");
-                meta.put("file_path", c.getFilePath());
-                meta.put("module_name", c.getModuleId() != null ? c.getModuleId() : "");
-                meta.put("project_id", projectId);
-                metas.add(meta);
-            }
+            ids.add(c.getClassId());
+            docs.add(buildClassIndexText(c));
+            Map<String, Object> meta = new HashMap<>();
+            meta.put("entity_id", c.getClassId());
+            meta.put("entity_type", "class");
+            meta.put("file_path", c.getFilePath());
+            meta.put("module_name", c.getModuleId() != null ? c.getModuleId() : "");
+            meta.put("project_id", projectId);
+            metas.add(meta);
         });
 
         result.methods().forEach(m -> {
-            if (StringUtils.hasText(m.getComment())) {
-                ids.add(m.getMethodId());
-                docs.add(m.getComment());
-                Map<String, Object> meta = new HashMap<>();
-                meta.put("entity_id", m.getMethodId());
-                meta.put("entity_type", "method");
-                meta.put("file_path", "");
-                meta.put("module_name", "");
-                meta.put("project_id", projectId);
-                metas.add(meta);
-            }
+            ids.add(m.getMethodId());
+            docs.add(buildMethodIndexText(m));
+            Map<String, Object> meta = new HashMap<>();
+            meta.put("entity_id", m.getMethodId());
+            meta.put("entity_type", "method");
+            meta.put("file_path", "");
+            meta.put("module_name", "");
+            meta.put("project_id", projectId);
+            metas.add(meta);
         });
 
         if (ids.isEmpty()) {
-            log.info("无注释实体需要向量化");
+            log.info("无实体需要向量化");
             return;
         }
 
@@ -79,12 +75,9 @@ public class VectorIndexService {
     }
 
     public void indexSingleSemantic(String entityId, String entityType, String content, String projectId) {
-        if (!StringUtils.hasText(content)) {
-            log.warn("注释内容为空，跳过向量化: entityId={}", entityId);
-            return;
-        }
+        String indexText = buildIndexTextFromId(entityId, entityType, content);
 
-        float[] embedding = embeddingProvider.embed(content);
+        float[] embedding = embeddingProvider.embed(indexText);
         Map<String, Object> meta = new HashMap<>();
         meta.put("entity_id", entityId);
         meta.put("entity_type", entityType.toLowerCase());
@@ -95,7 +88,7 @@ public class VectorIndexService {
         chromaClient.upsert(CODE_SEMANTICS,
                 List.of(entityId),
                 List.of(embedding),
-                List.of(content),
+                List.of(indexText),
                 List.of(meta));
 
         log.info("单条语义注释向量化完成: entityId={}, type={}", entityId, entityType);
@@ -126,5 +119,128 @@ public class VectorIndexService {
                     batchDocs,
                     metas.subList(i, end));
         }
+    }
+
+    /**
+     * 构建类的索引文本：类名 | 驼峰拆词 | 全限定名 | 注释
+     */
+    private String buildClassIndexText(com.lookgraph.domain.node.ClassNode classNode) {
+        StringBuilder sb = new StringBuilder();
+
+        String simpleName = classNode.getName();
+        String fullName = classNode.getClassId();
+        String comment = classNode.getComment();
+
+        // 简单类名
+        if (StringUtils.hasText(simpleName)) {
+            sb.append(simpleName).append(" | ");
+        }
+
+        // 驼峰拆词
+        if (StringUtils.hasText(simpleName)) {
+            sb.append(splitCamelCase(simpleName)).append(" | ");
+        }
+
+        // 全限定名
+        if (StringUtils.hasText(fullName)) {
+            sb.append(fullName).append(" | ");
+        }
+
+        // 注释（如果有，重复一次以增加权重）
+        if (StringUtils.hasText(comment)) {
+            sb.append(comment).append(" | ").append(comment);
+        }
+
+        return sb.toString();
+    }
+
+    /**
+     * 构建方法的索引文本：方法名 | 驼峰拆词 | 类名.方法名 | 完整签名 | 注释
+     */
+    private String buildMethodIndexText(com.lookgraph.domain.node.MethodNode methodNode) {
+        StringBuilder sb = new StringBuilder();
+
+        String methodName = methodNode.getName();
+        String methodId = methodNode.getMethodId();
+        String classId = methodNode.getClassId();
+        String comment = methodNode.getComment();
+
+        // 方法名
+        if (StringUtils.hasText(methodName)) {
+            sb.append(methodName).append(" | ");
+        }
+
+        // 驼峰拆词
+        if (StringUtils.hasText(methodName)) {
+            sb.append(splitCamelCase(methodName)).append(" | ");
+        }
+
+        // 类名.方法名
+        if (StringUtils.hasText(classId) && StringUtils.hasText(methodName)) {
+            String simpleClassName = classId.substring(classId.lastIndexOf('.') + 1);
+            sb.append(simpleClassName).append(".").append(methodName).append(" | ");
+        }
+
+        // 完整签名
+        if (StringUtils.hasText(methodId)) {
+            sb.append(methodId).append(" | ");
+        }
+
+        // 注释（如果有，重复一次以增加权重）
+        if (StringUtils.hasText(comment)) {
+            sb.append(comment).append(" | ").append(comment);
+        }
+
+        return sb.toString();
+    }
+
+    /**
+     * 从 entityId 构建索引文本（用于 semantic_annotate）
+     */
+    private String buildIndexTextFromId(String entityId, String entityType, String content) {
+        StringBuilder sb = new StringBuilder();
+
+        if ("class".equalsIgnoreCase(entityType)) {
+            // entityId 就是全限定类名：com.example.PriceChannelHelper
+            String simpleName = entityId.substring(entityId.lastIndexOf('.') + 1);
+
+            sb.append(simpleName).append(" | ");
+            sb.append(splitCamelCase(simpleName)).append(" | ");
+            sb.append(entityId).append(" | ");
+
+        } else if ("method".equalsIgnoreCase(entityType)) {
+            // entityId 格式：com.example.Class#method(params)
+            int hashIndex = entityId.indexOf('#');
+            if (hashIndex > 0) {
+                String classId = entityId.substring(0, hashIndex);
+                String methodSig = entityId.substring(hashIndex + 1);
+                int parenIndex = methodSig.indexOf('(');
+                String methodName = parenIndex > 0 ? methodSig.substring(0, parenIndex) : methodSig;
+                String simpleClassName = classId.substring(classId.lastIndexOf('.') + 1);
+
+                sb.append(methodName).append(" | ");
+                sb.append(splitCamelCase(methodName)).append(" | ");
+                sb.append(simpleClassName).append(".").append(methodName).append(" | ");
+                sb.append(entityId).append(" | ");
+            }
+        }
+
+        // 注释（如果有，重复一次以增加权重）
+        if (StringUtils.hasText(content)) {
+            sb.append(content).append(" | ").append(content);
+        }
+
+        return sb.toString();
+    }
+
+    /**
+     * 驼峰命名拆词：PriceChannelHelper -> Price Channel Helper
+     */
+    private String splitCamelCase(String input) {
+        if (input == null || input.isEmpty()) {
+            return "";
+        }
+        return input.replaceAll("([a-z])([A-Z])", "$1 $2")
+                    .replaceAll("([A-Z])([A-Z][a-z])", "$1 $2");
     }
 }

@@ -86,7 +86,10 @@
       "Bash(grep -E \"lookgraph|look-graph|jar$|spring-boot|Application\")",
       "Bash(ollama --version)",
       "Bash(sysctl *)",
-      "Bash(xargs ls)"
+      "Bash(xargs ls)",
+      "Bash(mvn compile *)",
+      "Bash(bash *)",
+      "Bash(mvn clean *)"
     ]
   }
 }
